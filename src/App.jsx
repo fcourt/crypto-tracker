@@ -13,22 +13,23 @@ export default function App() {
   const coinPlatformMap = useHyperliquidMeta(); // chargé une seule fois au démarrage
 
 // DEBUG — à supprimer après vérification
+// DEBUG — remplace l'ancien useEffect
 useEffect(() => {
-  if (Object.keys(coinPlatformMap).length > 0) {
-    console.log('Exemple de coins HyENA:', 
-      Object.entries(coinPlatformMap).filter(([,v]) => v === 'hyena').slice(0, 5)
-    );
-    console.log('Exemple de coins XYZ:', 
-      Object.entries(coinPlatformMap).filter(([,v]) => v === 'xyz').slice(0, 5)
-    );
+  if (Object.keys(coinPlatformMap).length > 0 && fills.length > 0) {
+    console.log('coinPlatformMap size:', Object.keys(coinPlatformMap).length);
+    console.log('fills count:', fills.length);
+    console.log('filteredFills count (xyz):', fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'xyz').length);
+    console.log('filteredFills count (hyena):', fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'hyena').length);
+
+    // Vérifie si les clés matchent
+    const xyzFills = fills.filter(f => f.coin.startsWith('xyz:'));
+    console.log('Fills avec préfixe xyz:', xyzFills.length);
+    if (xyzFills.length > 0) {
+      console.log('Exemple fill xyz:', xyzFills[0].coin);
+      console.log('Valeur dans la map:', coinPlatformMap[xyzFills[0].coin]);
+    }
   }
-}, [coinPlatformMap]);
-
-// DEBUG temporaire — ajoute juste après les useMemo dans App.jsx
-console.log('coinPlatformMap size:', Object.keys(coinPlatformMap).length);
-console.log('fills count:', fills.length);
-console.log('filteredFills count (xyz):', fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'xyz').length);
-
+}, [coinPlatformMap, fills]); // ← les deux dépendances
 
   
   
