@@ -10,13 +10,11 @@ export function useHyperliquidMeta() {
     if (metaCache) { setCoinPlatformMap(metaCache); return; }
 
     Promise.all([
-      // On récupère perpDexs pour la liste des DEX HIP-3
       fetch(HL_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'perpDexs' }),
       }).then(r => r.json()),
-      // On récupère meta pour la liste des perps natifs HL
       fetch(HL_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -26,25 +24,27 @@ export function useHyperliquidMeta() {
     .then(([dexs, meta]) => {
       const map = {};
 
-      // Perps natifs HL depuis meta.universe (pas de préfixe dans le coin)
+      // Perps natifs HL
       (meta.universe || []).forEach(market => {
         map[market.name] = 'hyperliquid';
       });
 
-      // Perps HIP-3 : dexs est un tableau, null = natifs HL (déjà traités)
+      // Perps HIP-3
       (dexs || []).forEach(dex => {
-        if (!dex) return; // skip null (natifs HL)
+        if (!dex) return;
+
+        // DEBUG — à supprimer après vérification
+        console.log('DEX name:', dex.name, '→ coins:', Object.keys(dex.assetToStreamingOiCap || {}).slice(0, 3));
+
         const platform = resolvePlatform(dex.name);
         const coins = Object.keys(dex.assetToStreamingOiCap || {});
-        // Le coin est au format "xyz:AAPL" → on le stocke tel quel
-        // car c'est ce que retournera fill.coin
         coins.forEach(coinKey => {
           map[coinKey] = platform;
         });
       });
 
-      console.log('Coins XYZ:', Object.entries(map).filter(([,v]) => v === 'xyz').slice(0, 5));
-      console.log('Coins HyENA:', Object.entries(map).filter(([,v]) => v === 'hyena').slice(0, 5));
+      console.log('Coins XYZ:', Object.entries(map).filter(([, v]) => v === 'xyz').slice(0, 5));
+      console.log('Coins HyENA:', Object.entries(map).filter(([, v]) => v === 'hyena').slice(0, 5));
 
       metaCache = map;
       setCoinPlatformMap(map);
@@ -57,8 +57,8 @@ export function useHyperliquidMeta() {
 
 function resolvePlatform(dexName) {
   const d = (dexName || '').toLowerCase();
-  if (d === '' || d === 'null') return 'hyperliquid';
+  if (d === '')                                          return 'hyperliquid';
   if (d === 'hyna' || d.includes('hyna') || d.includes('hyena')) return 'hyena';
-if (d === 'xyz' || d.includes('xyz'))                          return 'xyz';
+  if (d === 'xyz'  || d.includes('xyz'))                return 'xyz';
   return 'other_hip3';
 }
