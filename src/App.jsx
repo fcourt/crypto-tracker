@@ -24,26 +24,39 @@ useEffect(() => {
   }
 }, [coinPlatformMap]);
 
+// DEBUG temporaire — ajoute juste après les useMemo dans App.jsx
+console.log('coinPlatformMap size:', Object.keys(coinPlatformMap).length);
+console.log('fills count:', fills.length);
+console.log('filteredFills count (xyz):', fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'xyz').length);
 
 
   
   
   const [activePlatform, setActivePlatform] = useState('all');
 
-  const filteredFills = useMemo(() => {
-    return filterByPlatform(fills, activePlatform, coinPlatformMap);
-  }, [fills, activePlatform, coinPlatformMap]);
+// Attend que la map soit chargée avant de filtrer
+const isMetaReady = Object.keys(coinPlatformMap).length > 0;
 
-  const stats = useMemo(() => computeStats(filteredFills), [filteredFills]);
+const filteredFills = useMemo(() => {
+  if (!isMetaReady) return activePlatform === 'all' ? fills : [];
+  return filterByPlatform(fills, activePlatform, coinPlatformMap);
+}, [fills, activePlatform, coinPlatformMap, isMetaReady]);
 
-  const countByPlatform = useMemo(() => ({
+const countByPlatform = useMemo(() => {
+  if (!isMetaReady) return { all: fills.length, hyperliquid: 0, xyz: 0, hyena: 0, other_hip3: 0 };
+  return {
     all:         fills.length,
     hyperliquid: fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'hyperliquid').length,
     xyz:         fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'xyz').length,
     hyena:       fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'hyena').length,
     other_hip3:  fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'other_hip3').length,
-  }), [fills, coinPlatformMap]);
+  };
+}, [fills, coinPlatformMap, isMetaReady]);
 
+
+  const stats = useMemo(() => computeStats(filteredFills), [filteredFills]);
+
+  
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="border-b border-gray-800 px-4 py-4">
