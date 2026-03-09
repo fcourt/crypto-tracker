@@ -1,14 +1,14 @@
-/**
- * Retourne la plateforme d'un coin en se basant sur la map issue de l'endpoint meta
- * Fallback: 'hyperliquid' si le coin n'est pas dans la map
- */
-export function getPlatform(coin, coinPlatformMap) {
-  return coinPlatformMap[coin] || 'hyperliquid';
+export function getPlatform(coin) {
+  if (!coin) return 'hyperliquid';
+  if (coin.startsWith('xyz:'))  return 'xyz';
+  if (coin.startsWith('hyna:')) return 'hyena';
+  if (coin.includes(':'))       return 'other_hip3';
+  return 'hyperliquid';
 }
 
-export function filterByPlatform(fills, platform, coinPlatformMap) {
+export function filterByPlatform(fills, platform) {
   if (platform === 'all') return fills;
-  return fills.filter(f => getPlatform(f.coin, coinPlatformMap) === platform);
+  return fills.filter(f => getPlatform(f.coin) === platform);
 }
 
 export function computeStats(fills) {
