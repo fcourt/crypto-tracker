@@ -2,21 +2,19 @@ import { useState, useCallback } from 'react';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 
-// Builder codes connus
-const BUILDERS = {
-  'hyperliquid': null,                                       // natif
-  'xyz': '0x88806a71D74ad0a510b350545C9aE490912F0888',       // trade.xyz deployer
-  'hyena': '0x1924b8561eeF20e70Ede628A296175D358BE80e5',     // HyENA builder code
-};
-
 export function useHyperliquidFills() {
   const [fills, setFills] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchFills = useCallback(async (address, startTime = null) => {
+    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+      setError('Adresse Ethereum invalide');
+      return;
+    }
     setLoading(true);
     setError(null);
+    setFills([]);
     try {
       const body = startTime
         ? { type: 'userFillsByTime', user: address, startTime, endTime: Date.now() }
@@ -28,8 +26,10 @@ export function useHyperliquidFills() {
         body: JSON.stringify(body),
       });
 
+      if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`);
       const data = await res.json();
-      setFills(data);
+      // Exclure les trades spot (coin au format "@123")
+      setFills(data.filter(f => !f.coin.startsWith('@')));
     } catch (e) {
       setError(e.message);
     } finally {
