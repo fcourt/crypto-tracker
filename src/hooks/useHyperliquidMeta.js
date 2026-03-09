@@ -58,7 +58,7 @@ export function useHyperliquidMeta() {
 function resolvePlatform(dexName) {
   const d = (dexName || '').toLowerCase();
   if (d === '' || d === 'null') return 'hyperliquid';
-  if (d.includes('hyena'))     return 'hyena';
-  if (d === 'xyz')             return 'xyz';
+  if (d === 'hyna' || d.includes('hyna') || d.includes('hyena')) return 'hyena';
+if (d === 'xyz' || d.includes('xyz'))                          return 'xyz';
   return 'other_hip3';
 }
