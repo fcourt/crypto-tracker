@@ -5,7 +5,7 @@ import VolumeStats from './components/VolumeStats';
 import VolumeChart from './components/VolumeChart';
 import TradeTable from './components/TradeTable';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
-import { filterByPlatform, computeStats } from './utils/platformFilter';
+import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
@@ -19,11 +19,12 @@ export default function App() {
   const stats = useMemo(() => computeStats(filteredFills), [filteredFills]);
 
   const countByPlatform = useMemo(() => ({
-    all: fills.length,
-    hyperliquid: filterByPlatform(fills, 'hyperliquid').length,
-    xyz: filterByPlatform(fills, 'xyz').length,
-    hyena: filterByPlatform(fills, 'hyena').length,
-  }), [fills]);
+  all:          fills.length,
+  hyperliquid:  fills.filter(f => getPlatform(f.coin) === 'hyperliquid').length,
+  xyz:          fills.filter(f => getPlatform(f.coin) === 'xyz').length,
+  hyena:        fills.filter(f => getPlatform(f.coin) === 'hyena').length,
+  other_hip3:   fills.filter(f => getPlatform(f.coin) === 'other_hip3').length,
+}), [fills]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
