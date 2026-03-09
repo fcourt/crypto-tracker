@@ -11,6 +11,23 @@ import { getPlatform, filterByPlatform, computeStats } from './utils/platformFil
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
   const coinPlatformMap = useHyperliquidMeta(); // chargé une seule fois au démarrage
+
+// DEBUG — à supprimer après vérification
+useEffect(() => {
+  if (Object.keys(coinPlatformMap).length > 0) {
+    console.log('Exemple de coins HyENA:', 
+      Object.entries(coinPlatformMap).filter(([,v]) => v === 'hyena').slice(0, 5)
+    );
+    console.log('Exemple de coins XYZ:', 
+      Object.entries(coinPlatformMap).filter(([,v]) => v === 'xyz').slice(0, 5)
+    );
+  }
+}, [coinPlatformMap]);
+
+
+
+  
+  
   const [activePlatform, setActivePlatform] = useState('all');
 
   const filteredFills = useMemo(() => {
