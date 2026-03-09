@@ -28,8 +28,13 @@ export function useHyperliquidFills() {
 
       if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`);
       const data = await res.json();
-      // Exclure les trades spot (coin au format "@123")
-      setFills(data.filter(f => !f.coin.startsWith('@')));
+
+      const filteredFills = data.filter(f => !f.coin.startsWith('@'));
+
+      // DEBUG — à supprimer après vérification
+      console.log('Exemple de fills:', JSON.stringify(filteredFills.slice(0, 5), null, 2));
+
+      setFills(filteredFills);
     } catch (e) {
       setError(e.message);
     } finally {
