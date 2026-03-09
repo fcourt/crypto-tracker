@@ -5,36 +5,35 @@ import VolumeStats from './components/VolumeStats';
 import VolumeChart from './components/VolumeChart';
 import TradeTable from './components/TradeTable';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
+import { useHyperliquidMeta } from './hooks/useHyperliquidMeta';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
+  const coinPlatformMap = useHyperliquidMeta(); // chargé une seule fois au démarrage
   const [activePlatform, setActivePlatform] = useState('all');
 
   const filteredFills = useMemo(() => {
-    if (activePlatform === 'all') return fills;
-    return filterByPlatform(fills, activePlatform);
-  }, [fills, activePlatform]);
+    return filterByPlatform(fills, activePlatform, coinPlatformMap);
+  }, [fills, activePlatform, coinPlatformMap]);
 
   const stats = useMemo(() => computeStats(filteredFills), [filteredFills]);
 
   const countByPlatform = useMemo(() => ({
-  all:          fills.length,
-  hyperliquid:  fills.filter(f => getPlatform(f.coin) === 'hyperliquid').length,
-  xyz:          fills.filter(f => getPlatform(f.coin) === 'xyz').length,
-  hyena:        fills.filter(f => getPlatform(f.coin) === 'hyena').length,
-  other_hip3:   fills.filter(f => getPlatform(f.coin) === 'other_hip3').length,
-}), [fills]);
+    all:         fills.length,
+    hyperliquid: fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'hyperliquid').length,
+    xyz:         fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'xyz').length,
+    hyena:       fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'hyena').length,
+    other_hip3:  fills.filter(f => getPlatform(f.coin, coinPlatformMap) === 'other_hip3').length,
+  }), [fills, coinPlatformMap]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
       <div className="border-b border-gray-800 px-4 py-4">
         <h1 className="text-xl font-bold text-white">Perp Tracker</h1>
         <p className="text-gray-500 text-sm">Hyperliquid · trade.xyz · HyENA</p>
       </div>
 
-      {/* Wallet Search */}
       <WalletInput onSearch={fetchFills} loading={loading} />
 
       {error && (
@@ -45,20 +44,13 @@ export default function App() {
 
       {fills.length > 0 && (
         <>
-          {/* Platform Tabs */}
           <PlatformTabs
             active={activePlatform}
             onChange={setActivePlatform}
             countByPlatform={countByPlatform}
           />
-
-          {/* Stats */}
           <VolumeStats stats={stats} />
-
-          {/* Chart */}
           <VolumeChart fills={filteredFills} />
-
-          {/* Table */}
           <div className="mt-4 pb-8">
             <TradeTable fills={filteredFills} />
           </div>
