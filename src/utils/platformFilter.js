@@ -1,46 +1,57 @@
-// Coins déployés par HyENA sur HIP-3
-// Source: https://beacontrade.io/coins (tag "HIP-3 Hyena")
-export const HYENA_COINS = [
-  'FARTCOIN', 'IP', 'LTC', 'HYPE', 'BOME', 'WIF', 'BONK',
-  // à compléter via l'API méta: https://api.hyperliquid.xyz/info {type: "meta"}
-];
+// Le champ `coin` dans les fills HIP-3 contient le nom complet du marché
+// Exemples: "BTCHIP-3 Hyena", "NVDAHIP-3 XYZ", "GOLDHIP-3 Felix"
+// Les perps natifs HL n'ont PAS "HIP-3" dans leur nom: "BTC", "ETH", "SOL"
 
-// Coins déployés par trade.xyz sur HIP-3
-// Source: https://beacontrade.io/coins (tag "HIP-3 XYZ")
-export const XYZ_COINS = [
-  'NVDA', 'MSTR', 'TSM', 'GOLD', 'BRENTOIL', 'AAPL', 'TSLA',
-  // à compléter via l'API méta
-];
+/**
+ * Détecte la plateforme d'un fill en lisant le champ `coin`
+ */
+export function getPlatform(coin) {
+  if (!coin) return 'hyperliquid';
+  const c = coin.toUpperCase();
+  if (c.includes('HIP-3 XYZ'))        return 'xyz';
+  if (c.includes('HIP-3 HYENA'))      return 'hyena';
+  if (c.includes('HIP-3'))            return 'other_hip3'; // Felix, KM, Vantell, Cash...
+  return 'hyperliquid';
+}
 
+/**
+ * Filtre les fills selon la plateforme sélectionnée
+ */
 export function filterByPlatform(fills, platform) {
   switch (platform) {
     case 'xyz':
-      return fills.filter(f => XYZ_COINS.includes(f.coin));
+      return fills.filter(f => getPlatform(f.coin) === 'xyz');
     case 'hyena':
-      return fills.filter(f => HYENA_COINS.includes(f.coin));
+      return fills.filter(f => getPlatform(f.coin) === 'hyena');
     case 'hyperliquid':
+      // Perps natifs uniquement, sans aucun HIP-3
+      return fills.filter(f => getPlatform(f.coin) === 'hyperliquid');
+    case 'all':
     default:
-      // Les perps natifs HL = ceux qui ne sont ni XYZ ni HyENA
-      return fills.filter(
-        f => !XYZ_COINS.includes(f.coin) && !HYENA_COINS.includes(f.coin)
-      );
+      return fills;
   }
 }
 
+/**
+ * Calcule les statistiques d'un tableau de fills
+ */
 export function computeStats(fills) {
   return fills.reduce(
     (acc, fill) => {
       const notional = parseFloat(fill.px) * parseFloat(fill.sz);
       acc.volume += notional;
-      acc.fees += parseFloat(fill.fee || 0);
-      acc.pnl += parseFloat(fill.closedPnl || 0);
-      acc.count += 1;
+      acc.fees   += parseFloat(fill.fee || 0);
+      acc.pnl    += parseFloat(fill.closedPnl || 0);
+      acc.count  += 1;
       return acc;
     },
     { volume: 0, fees: 0, pnl: 0, count: 0 }
   );
 }
 
+/**
+ * Groupe le volume par jour pour le graphique
+ */
 export function groupVolumeByDay(fills) {
   const map = {};
   fills.forEach(fill => {
