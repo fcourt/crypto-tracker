@@ -1,40 +1,16 @@
-// Le champ `coin` dans les fills HIP-3 contient le nom complet du marché
-// Exemples: "BTCHIP-3 Hyena", "NVDAHIP-3 XYZ", "GOLDHIP-3 Felix"
-// Les perps natifs HL n'ont PAS "HIP-3" dans leur nom: "BTC", "ETH", "SOL"
-
 /**
- * Détecte la plateforme d'un fill en lisant le champ `coin`
+ * Retourne la plateforme d'un coin en se basant sur la map issue de l'endpoint meta
+ * Fallback: 'hyperliquid' si le coin n'est pas dans la map
  */
-export function getPlatform(coin) {
-  if (!coin) return 'hyperliquid';
-  const c = coin.toUpperCase();
-  if (c.includes('HIP-3 XYZ'))        return 'xyz';
-  if (c.includes('HIP-3 HYENA'))      return 'hyena';
-  if (c.includes('HIP-3'))            return 'other_hip3'; // Felix, KM, Vantell, Cash...
-  return 'hyperliquid';
+export function getPlatform(coin, coinPlatformMap) {
+  return coinPlatformMap[coin] || 'hyperliquid';
 }
 
-/**
- * Filtre les fills selon la plateforme sélectionnée
- */
-export function filterByPlatform(fills, platform) {
-  switch (platform) {
-    case 'xyz':
-      return fills.filter(f => getPlatform(f.coin) === 'xyz');
-    case 'hyena':
-      return fills.filter(f => getPlatform(f.coin) === 'hyena');
-    case 'hyperliquid':
-      // Perps natifs uniquement, sans aucun HIP-3
-      return fills.filter(f => getPlatform(f.coin) === 'hyperliquid');
-    case 'all':
-    default:
-      return fills;
-  }
+export function filterByPlatform(fills, platform, coinPlatformMap) {
+  if (platform === 'all') return fills;
+  return fills.filter(f => getPlatform(f.coin, coinPlatformMap) === platform);
 }
 
-/**
- * Calcule les statistiques d'un tableau de fills
- */
 export function computeStats(fills) {
   return fills.reduce(
     (acc, fill) => {
@@ -49,9 +25,6 @@ export function computeStats(fills) {
   );
 }
 
-/**
- * Groupe le volume par jour pour le graphique
- */
 export function groupVolumeByDay(fills) {
   const map = {};
   fills.forEach(fill => {
