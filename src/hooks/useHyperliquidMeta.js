@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 
-// Cache en mémoire pour éviter de refetch à chaque render
 let metaCache = null;
 
 export function useHyperliquidMeta() {
@@ -18,21 +17,25 @@ export function useHyperliquidMeta() {
     })
       .then(r => r.json())
       .then(data => {
+        // DEBUG — à supprimer après vérification
+        console.log('Structure meta:', JSON.stringify(data.universe.slice(0, 3), null, 2));
+
         const map = {};
-        // data.universe = liste de tous les markets perp
         (data.universe || []).forEach(market => {
           const name = market.name;
           const dex  = (market.dex || '').toLowerCase();
 
-          if (dex.includes('hyena'))                  map[name] = 'hyena';
+          if (dex.includes('hyena'))                        map[name] = 'hyena';
           else if (dex.includes('xyz') || dex.includes('trade')) map[name] = 'xyz';
-          else if (dex === '' || dex === 'hyperliquid') map[name] = 'hyperliquid';
-          else                                          map[name] = 'other_hip3';
+          else if (dex === '' || dex === 'hyperliquid')     map[name] = 'hyperliquid';
+          else                                               map[name] = 'other_hip3';
         });
+
         metaCache = map;
         setCoinPlatformMap(map);
       })
       .catch(console.error);
+
   }, []);
 
   return coinPlatformMap;
