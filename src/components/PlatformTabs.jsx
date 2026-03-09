@@ -3,6 +3,7 @@ const PLATFORMS = [
   { id: 'hyperliquid', label: 'Hyperliquid', color: 'green' },
   { id: 'xyz', label: 'trade.xyz', color: 'purple' },
   { id: 'hyena', label: 'HyENA', color: 'orange' },
+  { id: 'other_hip3',   label: 'Autres HIP-3' },  // Felix, KM, Vantell, Cash...
 ];
 
 export default function PlatformTabs({ active, onChange, countByPlatform }) {
