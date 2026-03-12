@@ -4,12 +4,15 @@ import PlatformTabs from './components/PlatformTabs';
 import VolumeStats from './components/VolumeStats';
 import VolumeChart from './components/VolumeChart';
 import TradeTable from './components/TradeTable';
+import MegaEthTab from './components/MegaEthTab';          // ← nouveau
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
   const [activePlatform, setActivePlatform] = useState('all');
+  const [activeChain, setActiveChain] = useState('hyperliquid'); // ← nouveau
+  const [walletAddress, setWalletAddress] = useState('');        // ← nouveau
 
   const filteredFills = useMemo(() => {
     return filterByPlatform(fills, activePlatform);
@@ -25,14 +28,22 @@ export default function App() {
     other_hip3:  fills.filter(f => getPlatform(f.coin) === 'other_hip3').length,
   }), [fills]);
 
+  // Mémorise l'adresse pour la passer à MegaEthTab
+  const handleSearch = (address, startTime) => {
+    setWalletAddress(address);
+    fetchFills(address, startTime);
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header */}
       <div className="border-b border-gray-800 px-4 py-4">
         <h1 className="text-xl font-bold text-white">Perp Tracker</h1>
-        <p className="text-gray-500 text-sm">Hyperliquid · trade.xyz · HyENA</p>
+        <p className="text-gray-500 text-sm">Hyperliquid · trade.xyz · HyENA · MegaETH</p>
       </div>
 
-      <WalletInput onSearch={fetchFills} loading={loading} />
+      {/* Wallet Search */}
+      <WalletInput onSearch={handleSearch} loading={loading} />
 
       {error && (
         <div className="mx-4 mb-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-400 text-sm">
@@ -40,25 +51,52 @@ export default function App() {
         </div>
       )}
 
-      {fills.length > 0 && (
+      {/* Sélecteur de chaîne principal */}
+      <div className="flex gap-2 px-4 mt-2 mb-4">
+        {[
+          { id: 'hyperliquid', label: '⚡ Hyperliquid Perps' },
+          { id: 'megaeth',     label: '🔷 MegaETH' },
+        ].map(chain => (
+          <button
+            key={chain.id}
+            onClick={() => setActiveChain(chain.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
+              ${activeChain === chain.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+          >
+            {chain.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Contenu selon la chaîne sélectionnée */}
+      {activeChain === 'hyperliquid' && (
         <>
-          <PlatformTabs
-            active={activePlatform}
-            onChange={setActivePlatform}
-            countByPlatform={countByPlatform}
-          />
-          <VolumeStats stats={stats} />
-          <VolumeChart fills={filteredFills} />
-          <div className="mt-4 pb-8">
-            <TradeTable fills={filteredFills} />
-          </div>
+          {fills.length > 0 && (
+            <>
+              <PlatformTabs
+                active={activePlatform}
+                onChange={setActivePlatform}
+                countByPlatform={countByPlatform}
+              />
+              <VolumeStats stats={stats} />
+              <VolumeChart fills={filteredFills} />
+              <div className="mt-4 pb-8">
+                <TradeTable fills={filteredFills} />
+              </div>
+            </>
+          )}
+          {!loading && fills.length === 0 && !error && (
+            <div className="text-center text-gray-600 py-20 text-sm">
+              Entrez une adresse wallet pour commencer
+            </div>
+          )}
         </>
       )}
 
-      {!loading && fills.length === 0 && !error && (
-        <div className="text-center text-gray-600 py-20 text-sm">
-          Entrez une adresse wallet pour commencer
-        </div>
+      {activeChain === 'megaeth' && (
+        <MegaEthTab address={walletAddress} />
       )}
     </div>
   );
