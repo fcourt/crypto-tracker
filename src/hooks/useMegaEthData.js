@@ -1,15 +1,7 @@
-// URLs candidates pour le Blockscout MegaETH mainnet
-// On tente chaque URL jusqu'à obtenir une réponse valide
-const BLOCKSCOUT_URLS = [
-  'https://www.megaeth.com/api/v2',
-  'https://explorer.megaeth.com/api/v2',
-  'https://megaeth.blockscout.com/api/v2',
-  'https://megaeth-mainnet.blockscout.com/api/v2',
-];
+const BLOCKSCOUT = 'https://megaeth.blockscout.com/api/v2';
 
-// RPC direct MegaETH comme fallback pour ETH balance + gas
-const MEGA_RPC = 'https://carrot.megaeth.com';
-const MEGA_CHAIN_ID = '0x10e9'; // 4329 en hex (mainnet MegaETH)
+// RPC public MegaETH sans restriction CORS
+const MEGA_RPC = 'https://6342.rpc.thirdweb.com';
 
 async function rpcCall(method, params) {
   const res = await fetch(MEGA_RPC, {
@@ -21,69 +13,74 @@ async function rpcCall(method, params) {
   return data.result;
 }
 
-async function findWorkingBlockscout(address) {
-  for (const base of BLOCKSCOUT_URLS) {
-    try {
-      const res = await fetch(`${base}/addresses/${address}`, {
-        signal: AbortSignal.timeout(4000),
-      });
-      if (res.ok) {
-        console.log('Blockscout URL fonctionnelle:', base);
-        return base;
-      }
-    } catch {
-      // URL non disponible, on essaie la suivante
-    }
-  }
-  return null;
-}
-
 const MEGA_BRIDGE_ADDRESS = '0x0ca3a2fbc3d770b578223fbb6b062fa875a2ee75';
 
 export async function fetchMegaEthData(address) {
-  // 1. Cherche l'URL Blockscout fonctionnelle
-  const BLOCKSCOUT = await findWorkingBlockscout(address);
-
   let transactions = [];
   let tokens = [];
   let internalTxs = [];
+  let ethBalance = 0;
 
-  if (BLOCKSCOUT) {
-    try {
-      const [txRes, tokenRes, internalRes] = await Promise.all([
-        fetch(`${BLOCKSCOUT}/addresses/${address}/transactions?limit=50`),
-        fetch(`${BLOCKSCOUT}/addresses/${address}/tokens?type=ERC-20`),
-        fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions?limit=50`),
-      ]);
-      const [txData, tokenData, internalData] = await Promise.all([
-        txRes.json(),
-        tokenRes.json(),
-        internalRes.json(),
-      ]);
+  // Tokens — fonctionne correctement
+  try {
+    const tokenRes = await fetch(`${BLOCKSCOUT}/addresses/${address}/tokens?type=ERC-20`);
+    const tokenData = await tokenRes.json();
+    tokens = tokenData.items || [];
+  } catch (e) {
+    console.error('Erreur tokens:', e);
+  }
 
-      console.log('TX sample:', JSON.stringify((txData.items || []).slice(0, 1), null, 2));
-      console.log('Token sample:', JSON.stringify((tokenData.items || []).slice(0, 1), null, 2));
-      console.log('Internal TX sample:', JSON.stringify((internalData.items || []).slice(0, 1), null, 2));
-
+  // Transactions — utilise le bon endpoint Blockscout v2
+  try {
+    const txRes = await fetch(
+      `${BLOCKSCOUT}/addresses/${address}/transactions?filter=to%20%7C%20from&limit=50`
+    );
+    if (txRes.ok) {
+      const txData = await txRes.json();
       transactions = txData.items || [];
-      tokens = tokenData.items || [];
-      internalTxs = internalData.items || [];
-    } catch (e) {
-      console.error('Erreur Blockscout:', e);
+      console.log('TX sample:', JSON.stringify(transactions.slice(0, 1), null, 2));
+    } else {
+      console.warn('TX status:', txRes.status);
+      // Fallback : endpoint alternatif
+      const txRes2 = await fetch(`${BLOCKSCOUT}/transactions?address=${address}&limit=50`);
+      if (txRes2.ok) {
+        const txData2 = await txRes2.json();
+        transactions = txData2.items || [];
+      }
+    }
+  } catch (e) {
+    console.error('Erreur transactions:', e);
+  }
+
+  // Internal transactions
+  try {
+    const intRes = await fetch(
+      `${BLOCKSCOUT}/addresses/${address}/internal-transactions?filter=to%20%7C%20from&limit=50`
+    );
+    if (intRes.ok) {
+      const intData = await intRes.json();
+      internalTxs = intData.items || [];
+    }
+  } catch (e) {
+    console.error('Erreur internal TX:', e);
+  }
+
+  // Balance ETH via RPC (thirdweb supporte CORS)
+  try {
+    const raw = await rpcCall('eth_getBalance', [address, 'latest']);
+    ethBalance = parseInt(raw, 16) / 1e18;
+  } catch (e) {
+    // Fallback : lire depuis Blockscout address info
+    try {
+      const addrRes = await fetch(`${BLOCKSCOUT}/addresses/${address}`);
+      const addrData = await addrRes.json();
+      ethBalance = parseFloat(addrData.coin_balance || 0) / 1e18;
+    } catch (e2) {
+      console.error('Erreur balance:', e2);
     }
   }
 
-  // 2. Fallback RPC : ETH balance directement depuis le nœud
-  let ethBalanceWei = '0x0';
-  try {
-    ethBalanceWei = await rpcCall('eth_getBalance', [address, 'latest']);
-  } catch (e) {
-    console.error('Erreur RPC balance:', e);
-  }
-
-  const ethBalance = parseInt(ethBalanceWei, 16) / 1e18;
-
-  return { transactions, tokens, internalTxs, ethBalance, blockscoutAvailable: !!BLOCKSCOUT };
+  return { transactions, tokens, internalTxs, ethBalance };
 }
 
 export function computeMegaStats(transactions, internalTxs) {
@@ -101,7 +98,8 @@ export function computeMegaStats(transactions, internalTxs) {
       dexTxCount += 1;
       tx.token_transfers.forEach(t => {
         if (t.total?.value && t.token?.exchange_rate) {
-          const usdValue = (parseFloat(t.total.value) / Math.pow(10, t.token?.decimals || 18))
+          const usdValue =
+            (parseFloat(t.total.value) / Math.pow(10, parseInt(t.token.decimals) || 18))
             * parseFloat(t.token.exchange_rate);
           dexVolumeUsd += usdValue;
         }
