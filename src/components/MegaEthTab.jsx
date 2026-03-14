@@ -49,7 +49,8 @@ export default function MegaEthTab({ address }) {
     </div>
   );
 
-  const stats = computeMegaStats(data.transactions, data.internalTxs);
+  //const stats = computeMegaStats(data.transactions, data.internalTxs);
+  const stats = computeMegaStats(data.transactions, data.tokenTransfers);
 
   const totalTokensUsd = data.tokens.reduce((acc, item) => {
     if (!item.token?.exchange_rate) return acc;
@@ -65,8 +66,8 @@ export default function MegaEthTab({ address }) {
         {[
           { label: 'Balance ETH',         value: `${data.ethBalance.toFixed(6)} ETH` },
           { label: 'Valeur tokens ERC-20', value: `$${totalTokensUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
-          { label: 'Gas fees payées',      value: `${stats.totalGasEth.toFixed(6)} ETH` },
-          { label: 'Swaps détectés',       value: stats.dexTxCount },
+          { label: 'Gas fees payées', value: `${stats.totalGasEth.toFixed(6)} ETH` },
+          { label: 'Swaps détectés', value: stats.dexTxCount },
         ].map(({ label, value }) => (
           <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
             <p className="text-gray-400 text-xs mb-1">{label}</p>
