@@ -1,7 +1,6 @@
 const BLOCKSCOUT = 'https://megaeth.blockscout.com/api/v2';
-
-// RPC public MegaETH sans restriction CORS
-const MEGA_RPC = 'https://6342.rpc.thirdweb.com';
+const MEGA_RPC   = 'https://mainnet.megaeth.com/rpc';
+const MEGA_BRIDGE_ADDRESS = '0x0ca3a2fbc3d770b578223fbb6b062fa875a2ee75';
 
 async function rpcCall(method, params) {
   const res = await fetch(MEGA_RPC, {
@@ -13,84 +12,66 @@ async function rpcCall(method, params) {
   return data.result;
 }
 
-const MEGA_BRIDGE_ADDRESS = '0x0ca3a2fbc3d770b578223fbb6b062fa875a2ee75';
-
 export async function fetchMegaEthData(address) {
   let transactions = [];
-  let tokens = [];
-  let internalTxs = [];
-  let ethBalance = 0;
+  let tokens       = [];
+  let internalTxs  = [];
+  let ethBalance   = 0;
 
-  // Tokens — fonctionne correctement
+  // Tokens ERC-20 — fonctionne
   try {
-    const tokenRes = await fetch(`${BLOCKSCOUT}/addresses/${address}/tokens?type=ERC-20`);
-    const tokenData = await tokenRes.json();
-    tokens = tokenData.items || [];
-  } catch (e) {
-    console.error('Erreur tokens:', e);
-  }
+    const res  = await fetch(`${BLOCKSCOUT}/addresses/${address}/tokens?type=ERC-20`);
+    const data = await res.json();
+    tokens = data.items || [];
+  } catch (e) { console.error('Erreur tokens:', e); }
 
-  // Transactions — utilise le bon endpoint Blockscout v2
+  // Transactions — sans paramètre filter (absent = to + from)
   try {
-    const txRes = await fetch(
-      `${BLOCKSCOUT}/addresses/${address}/transactions?filter=to%20%7C%20from&limit=50`
-    );
-    if (txRes.ok) {
-      const txData = await txRes.json();
-      transactions = txData.items || [];
+    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions?limit=50`);
+    if (res.ok) {
+      const data = await res.json();
+      transactions = data.items || [];
       console.log('TX sample:', JSON.stringify(transactions.slice(0, 1), null, 2));
     } else {
-      console.warn('TX status:', txRes.status);
-      // Fallback : endpoint alternatif
-      const txRes2 = await fetch(`${BLOCKSCOUT}/transactions?address=${address}&limit=50`);
-      if (txRes2.ok) {
-        const txData2 = await txRes2.json();
-        transactions = txData2.items || [];
-      }
+      console.warn('TX status:', res.status, await res.text());
     }
-  } catch (e) {
-    console.error('Erreur transactions:', e);
-  }
+  } catch (e) { console.error('Erreur transactions:', e); }
 
-  // Internal transactions
+  // Internal transactions — sans paramètre filter
   try {
-    const intRes = await fetch(
-      `${BLOCKSCOUT}/addresses/${address}/internal-transactions?filter=to%20%7C%20from&limit=50`
-    );
-    if (intRes.ok) {
-      const intData = await intRes.json();
-      internalTxs = intData.items || [];
+    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions?limit=50`);
+    if (res.ok) {
+      const data = await res.json();
+      internalTxs = data.items || [];
+    } else {
+      console.warn('Internal TX status:', res.status);
     }
-  } catch (e) {
-    console.error('Erreur internal TX:', e);
-  }
+  } catch (e) { console.error('Erreur internal TX:', e); }
 
-  // Balance ETH via RPC (thirdweb supporte CORS)
+  // Balance ETH — via RPC officiel MegaETH
   try {
     const raw = await rpcCall('eth_getBalance', [address, 'latest']);
     ethBalance = parseInt(raw, 16) / 1e18;
   } catch (e) {
-    // Fallback : lire depuis Blockscout address info
+    // Fallback : coin_balance depuis l'info adresse Blockscout
     try {
-      const addrRes = await fetch(`${BLOCKSCOUT}/addresses/${address}`);
-      const addrData = await addrRes.json();
-      ethBalance = parseFloat(addrData.coin_balance || 0) / 1e18;
-    } catch (e2) {
-      console.error('Erreur balance:', e2);
-    }
+      const res  = await fetch(`${BLOCKSCOUT}/addresses/${address}`);
+      const data = await res.json();
+      ethBalance = parseFloat(data.coin_balance || 0) / 1e18;
+    } catch (e2) { console.error('Erreur balance:', e2); }
   }
 
   return { transactions, tokens, internalTxs, ethBalance };
 }
 
 export function computeMegaStats(transactions, internalTxs) {
-  let totalGasEth = 0;
-  let dexVolumeUsd = 0;
+  let totalGasEth    = 0;
+  let dexVolumeUsd   = 0;
   let bridgeVolumeEth = 0;
-  let dexTxCount = 0;
+  let dexTxCount     = 0;
 
   transactions.forEach(tx => {
-    const gasUsed = parseFloat(tx.gas_used || 0);
+    const gasUsed  = parseFloat(tx.gas_used  || 0);
     const gasPrice = parseFloat(tx.gas_price || 0);
     totalGasEth += (gasUsed * gasPrice) / 1e18;
 
