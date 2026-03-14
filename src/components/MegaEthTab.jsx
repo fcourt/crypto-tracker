@@ -54,20 +54,26 @@ export default function MegaEthTab({ address }) {
   return (
     <div className="space-y-6 pb-8">
 
-      {/* Stats globales */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4">
-        {[
-          { label: 'Volume DEX (approx.)', value: `$${stats.dexVolumeUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
-          { label: 'Swaps détectés', value: stats.dexTxCount },
-          { label: 'Gas fees payées', value: `${stats.totalGasEth.toFixed(6)} ETH` },
-          { label: 'Bridge entrant', value: `${stats.bridgeVolumeEth.toFixed(4)} ETH` },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-xs mb-1">{label}</p>
-            <p className="text-lg font-bold text-white">{value}</p>
-          </div>
-        ))}
-      </div>
+     {/* Stats globales */}
+<div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4">
+  {[
+    { label: 'Balance ETH', value: `${data.ethBalance.toFixed(6)} ETH` },
+    { label: 'Volume DEX (approx.)', value: `$${stats.dexVolumeUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
+    { label: 'Swaps détectés', value: stats.dexTxCount },
+    { label: 'Gas fees payées', value: `${stats.totalGasEth.toFixed(6)} ETH` },
+  ].map(({ label, value }) => (
+    <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+      <p className="text-gray-400 text-xs mb-1">{label}</p>
+      <p className="text-lg font-bold text-white">{value}</p>
+    </div>
+  ))}
+</div>
+
+{!data.blockscoutAvailable && (
+  <div className="mx-4 bg-yellow-900/30 border border-yellow-700 rounded-lg px-4 py-3 text-yellow-400 text-sm">
+    ⚠️ L'explorateur Blockscout MegaETH n'est pas accessible. Seule la balance ETH est disponible via RPC.
+  </div>
+)}
 
       {/* Tokens détenus */}
       <div className="mx-4">
