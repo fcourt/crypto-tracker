@@ -18,6 +18,11 @@ export async function fetchMegaEthData(address) {
     internalRes.json(),
   ]);
 
+  // DEBUG — à supprimer après vérification
+  console.log('TX sample:', JSON.stringify((txData.items || []).slice(0, 2), null, 2));
+  console.log('Token sample:', JSON.stringify((tokenData.items || []).slice(0, 2), null, 2));
+  console.log('Internal TX sample:', JSON.stringify((internalData.items || []).slice(0, 2), null, 2));
+
   return {
     transactions: txData.items || [],
     tokens: tokenData.items || [],
