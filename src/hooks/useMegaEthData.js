@@ -15,86 +15,90 @@ async function rpcCall(method, params) {
 export async function fetchMegaEthData(address) {
   let transactions = [];
   let tokens       = [];
-  let internalTxs  = [];
+  let tokenTransfers = [];
   let ethBalance   = 0;
 
-  // Tokens ERC-20 — fonctionne
+  // Tokens ERC-20
   try {
     const res  = await fetch(`${BLOCKSCOUT}/addresses/${address}/tokens?type=ERC-20`);
     const data = await res.json();
     tokens = data.items || [];
   } catch (e) { console.error('Erreur tokens:', e); }
 
-  // Transactions — sans paramètre filter (absent = to + from)
+  // Transactions
   try {
-    //const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions?limit=50`);
     const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions`);
     if (res.ok) {
       const data = await res.json();
       transactions = data.items || [];
-      console.log('TX sample:', JSON.stringify(transactions.slice(0, 1), null, 2));
     } else {
       console.warn('TX status:', res.status, await res.text());
     }
   } catch (e) { console.error('Erreur transactions:', e); }
 
-  // Internal transactions — sans paramètre filter
+  // Token transfers — endpoint séparé pour les swaps
   try {
-    //const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions?limit=50`);
-    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions`);
+    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/token-transfers?type=ERC-20`);
     if (res.ok) {
       const data = await res.json();
-      internalTxs = data.items || [];
-    } else {
-      console.warn('Internal TX status:', res.status);
+      tokenTransfers = data.items || [];
+      console.log('Token transfers sample:', JSON.stringify(tokenTransfers.slice(0, 2), null, 2));
     }
-  } catch (e) { console.error('Erreur internal TX:', e); }
+  } catch (e) { console.error('Erreur token transfers:', e); }
 
-  // Balance ETH — via RPC officiel MegaETH
+  // Balance ETH via RPC
   try {
     const raw = await rpcCall('eth_getBalance', [address, 'latest']);
     ethBalance = parseInt(raw, 16) / 1e18;
   } catch (e) {
-    // Fallback : coin_balance depuis l'info adresse Blockscout
+    // Fallback Blockscout address info
     try {
       const res  = await fetch(`${BLOCKSCOUT}/addresses/${address}`);
       const data = await res.json();
       ethBalance = parseFloat(data.coin_balance || 0) / 1e18;
+      console.log('Balance via Blockscout:', ethBalance);
     } catch (e2) { console.error('Erreur balance:', e2); }
   }
 
-  return { transactions, tokens, internalTxs, ethBalance };
+  return { transactions, tokens, tokenTransfers, ethBalance };
 }
 
-export function computeMegaStats(transactions, internalTxs) {
-  let totalGasEth    = 0;
-  let dexVolumeUsd   = 0;
-  let bridgeVolumeEth = 0;
-  let dexTxCount     = 0;
+export function computeMegaStats(transactions, tokenTransfers) {
+  let totalGasEth  = 0;
+  let dexVolumeUsd = 0;
+  let dexTxCount   = 0;
 
+  // Gas fees : fee.value est en wei
   transactions.forEach(tx => {
-    const gasUsed  = parseFloat(tx.gas_used  || 0);
-    const gasPrice = parseFloat(tx.gas_price || 0);
-    totalGasEth += (gasUsed * gasPrice) / 1e18;
+    const feeWei = parseFloat(tx.fee?.value || 0);
+    totalGasEth += feeWei / 1e18;
+  });
 
-    if (tx.token_transfers && tx.token_transfers.length >= 2) {
+  // Swaps : groupe les token transfers par hash de transaction
+  // Si un même hash a >= 2 transfers → c'est un swap
+  const transfersByHash = {};
+  tokenTransfers.forEach(t => {
+    const hash = t.transaction_hash || t.tx_hash || '';
+    if (!transfersByHash[hash]) transfersByHash[hash] = [];
+    transfersByHash[hash].push(t);
+  });
+
+  Object.values(transfersByHash).forEach(transfers => {
+    if (transfers.length >= 2) {
       dexTxCount += 1;
-      tx.token_transfers.forEach(t => {
-        if (t.total?.value && t.token?.exchange_rate) {
-          const usdValue =
-            (parseFloat(t.total.value) / Math.pow(10, parseInt(t.token.decimals) || 18))
-            * parseFloat(t.token.exchange_rate);
-          dexVolumeUsd += usdValue;
+      // Compte le volume sur le transfer entrant (to = notre adresse)
+      transfers.forEach(t => {
+        if (t.to?.hash?.toLowerCase() === t.to?.hash?.toLowerCase()) {
+          if (t.total?.value && t.token?.exchange_rate) {
+            const usdValue =
+              (parseFloat(t.total.value) / Math.pow(10, parseInt(t.token.decimals) || 18))
+              * parseFloat(t.token.exchange_rate);
+            dexVolumeUsd += usdValue;
+          }
         }
       });
     }
   });
 
-  internalTxs.forEach(tx => {
-    if (tx.from?.hash?.toLowerCase() === MEGA_BRIDGE_ADDRESS.toLowerCase()) {
-      bridgeVolumeEth += parseFloat(tx.value || 0) / 1e18;
-    }
-  });
-
-  return { totalGasEth, dexVolumeUsd, bridgeVolumeEth, dexTxCount };
+  return { totalGasEth, dexVolumeUsd, dexTxCount };
 }
