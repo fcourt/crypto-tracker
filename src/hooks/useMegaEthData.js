@@ -28,7 +28,7 @@ export async function fetchMegaEthData(address) {
   // Transactions — sans paramètre filter (absent = to + from)
   try {
     //const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions?limit=50`);
-    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions?page_size=50`);
+    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/transactions`);
     if (res.ok) {
       const data = await res.json();
       transactions = data.items || [];
@@ -41,7 +41,7 @@ export async function fetchMegaEthData(address) {
   // Internal transactions — sans paramètre filter
   try {
     //const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions?limit=50`);
-    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions?page_size=50`);
+    const res = await fetch(`${BLOCKSCOUT}/addresses/${address}/internal-transactions`);
     if (res.ok) {
       const data = await res.json();
       internalTxs = data.items || [];
