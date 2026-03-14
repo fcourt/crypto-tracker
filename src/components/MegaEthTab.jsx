@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { fetchMegaEthData, computeMegaStats } from '../hooks/useMegaEthData';
+import DefiPositions from './DefiPositions';
 
 const BLOCKSCOUT_URL = 'https://megaeth.blockscout.com/address';
 
@@ -116,6 +117,8 @@ export default function MegaEthTab({ address }) {
         )}
       </div>
 
+<DefiPositions address={address} />
+      
       {/* Dernières transactions */}
       <div className="mx-4">
         <h3 className="text-sm font-medium text-gray-400 mb-3">
