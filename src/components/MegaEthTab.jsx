@@ -51,31 +51,31 @@ export default function MegaEthTab({ address }) {
 
   const stats = computeMegaStats(data.transactions, data.internalTxs);
 
+  const totalTokensUsd = data.tokens.reduce((acc, item) => {
+    if (!item.token?.exchange_rate) return acc;
+    const balance = parseFloat(item.value || 0) / Math.pow(10, parseInt(item.token.decimals) || 18);
+    return acc + balance * parseFloat(item.token.exchange_rate);
+  }, 0);
+
   return (
     <div className="space-y-6 pb-8">
 
-     {/* Stats globales */}
-<div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4">
-  {[
-    { label: 'Balance ETH', value: `${data.ethBalance.toFixed(6)} ETH` },
-    { label: 'Volume DEX (approx.)', value: `$${stats.dexVolumeUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
-    { label: 'Swaps détectés', value: stats.dexTxCount },
-    { label: 'Gas fees payées', value: `${stats.totalGasEth.toFixed(6)} ETH` },
-  ].map(({ label, value }) => (
-    <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-      <p className="text-gray-400 text-xs mb-1">{label}</p>
-      <p className="text-lg font-bold text-white">{value}</p>
-    </div>
-  ))}
-</div>
+      {/* Stats globales */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4">
+        {[
+          { label: 'Balance ETH',         value: `${data.ethBalance.toFixed(6)} ETH` },
+          { label: 'Valeur tokens ERC-20', value: `$${totalTokensUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
+          { label: 'Gas fees payées',      value: `${stats.totalGasEth.toFixed(6)} ETH` },
+          { label: 'Swaps détectés',       value: stats.dexTxCount },
+        ].map(({ label, value }) => (
+          <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <p className="text-gray-400 text-xs mb-1">{label}</p>
+            <p className="text-lg font-bold text-white">{value}</p>
+          </div>
+        ))}
+      </div>
 
-{!data.blockscoutAvailable && (
-  <div className="mx-4 bg-yellow-900/30 border border-yellow-700 rounded-lg px-4 py-3 text-yellow-400 text-sm">
-    ⚠️ L'explorateur Blockscout MegaETH n'est pas accessible. Seule la balance ETH est disponible via RPC.
-  </div>
-)}
-
-      {/* Tokens détenus */}
+      {/* Tokens ERC-20 détenus */}
       <div className="mx-4">
         <h3 className="text-sm font-medium text-gray-400 mb-3">
           Tokens ERC-20 détenus ({data.tokens.length})
@@ -94,7 +94,7 @@ export default function MegaEthTab({ address }) {
               </thead>
               <tbody className="divide-y divide-gray-800">
                 {data.tokens.map((item, i) => {
-                  const balance = parseFloat(item.value || 0) / Math.pow(10, item.token?.decimals || 18);
+                  const balance = parseFloat(item.value || 0) / Math.pow(10, parseInt(item.token?.decimals) || 18);
                   const usd = item.token?.exchange_rate
                     ? (balance * parseFloat(item.token.exchange_rate)).toFixed(2)
                     : '-';
@@ -102,7 +102,9 @@ export default function MegaEthTab({ address }) {
                     <tr key={i} className="hover:bg-gray-800/50">
                       <td className="px-4 py-2 text-white">{item.token?.name || '-'}</td>
                       <td className="px-4 py-2 text-blue-400 font-medium">{item.token?.symbol || '-'}</td>
-                      <td className="px-4 py-2 text-gray-300">{balance.toLocaleString('fr-FR', { maximumFractionDigits: 4 })}</td>
+                      <td className="px-4 py-2 text-gray-300">
+                        {balance.toLocaleString('fr-FR', { maximumFractionDigits: 6 })}
+                      </td>
                       <td className="px-4 py-2 text-gray-300">{usd !== '-' ? `$${usd}` : '-'}</td>
                     </tr>
                   );
@@ -145,7 +147,7 @@ export default function MegaEthTab({ address }) {
                       </td>
                       <td className="px-4 py-2">
                         <a
-                          href={`${BLOCKSCOUT_URL}/${address}`}
+                          href={`${BLOCKSCOUT_URL}/${hash}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-blue-400 hover:text-blue-300 font-mono text-xs"
@@ -154,7 +156,11 @@ export default function MegaEthTab({ address }) {
                         </a>
                       </td>
                       <td className="px-4 py-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${isSwap ? 'bg-purple-900/50 text-purple-300' : 'bg-gray-700 text-gray-400'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          isSwap
+                            ? 'bg-purple-900/50 text-purple-300'
+                            : 'bg-gray-700 text-gray-400'
+                        }`}>
                           {isSwap ? 'Swap' : tx.method || 'Transfer'}
                         </span>
                       </td>
