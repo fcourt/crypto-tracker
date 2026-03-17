@@ -89,7 +89,11 @@ export default function App() {
               {/* Panneau Funding */}
               <div className="mt-6 pb-8">
                 <h2 className="text-sm font-medium text-gray-400 px-4 mb-3">💰 Funding Perps</h2>
-                <FundingPanel address={walletAddress} startTime={null} />
+                <FundingPanel  
+                  key={walletAddress}
+                  address={walletAddress}
+                  startTime={null}
+                  />
               </div>
             </>
           )}
