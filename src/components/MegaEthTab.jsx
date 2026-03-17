@@ -63,19 +63,21 @@ export default function MegaEthTab({ address }) {
     <div className="space-y-6 pb-8">
 
       {/* Stats globales */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-4">
-        {[
-          { label: 'Balance ETH',         value: `${data.ethBalance.toFixed(6)} ETH` },
-          { label: 'Valeur tokens ERC-20', value: `$${totalTokensUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
-          { label: 'Gas fees payées', value: `${stats.totalGasEth.toFixed(6)} ETH` },
-          { label: 'Swaps détectés', value: stats.dexTxCount },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-xs mb-1">{label}</p>
-            <p className="text-lg font-bold text-white">{value}</p>
-          </div>
-        ))}
-      </div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 px-4">
+  {[
+    { label: 'Balance ETH',          value: `${data.ethBalance.toFixed(6)} ETH` },
+    { label: 'Valeur tokens ERC-20', value: `$${totalTokensUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
+    { label: 'Gas fees payées',      value: `${stats.totalGasEth.toFixed(6)} ETH` },
+    { label: 'Swaps détectés',       value: stats.dexTxCount },
+    { label: 'Volume swaps (approx.)', value: `$${stats.dexVolumeUsd.toLocaleString('fr-FR', { maximumFractionDigits: 2 })}` },
+  ].map(({ label, value }) => (
+    <div key={label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+      <p className="text-gray-400 text-xs mb-1">{label}</p>
+      <p className="text-lg font-bold text-white">{value}</p>
+    </div>
+  ))}
+</div>
+
 
       {/* Tokens ERC-20 détenus */}
       <div className="mx-4">
