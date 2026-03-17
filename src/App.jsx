@@ -4,15 +4,16 @@ import PlatformTabs from './components/PlatformTabs';
 import VolumeStats from './components/VolumeStats';
 import VolumeChart from './components/VolumeChart';
 import TradeTable from './components/TradeTable';
-import MegaEthTab from './components/MegaEthTab';          // ← nouveau
+import MegaEthTab from './components/MegaEthTab';
+import FundingPanel from './components/FundingPanel';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
   const [activePlatform, setActivePlatform] = useState('all');
-  const [activeChain, setActiveChain] = useState('hyperliquid'); // ← nouveau
-  const [walletAddress, setWalletAddress] = useState('');        // ← nouveau
+  const [activeChain, setActiveChain] = useState('hyperliquid');
+  const [walletAddress, setWalletAddress] = useState('');
 
   const filteredFills = useMemo(() => {
     return filterByPlatform(fills, activePlatform);
@@ -28,7 +29,6 @@ export default function App() {
     other_hip3:  fills.filter(f => getPlatform(f.coin) === 'other_hip3').length,
   }), [fills]);
 
-  // Mémorise l'adresse pour la passer à MegaEthTab
   const handleSearch = (address, startTime) => {
     setWalletAddress(address);
     fetchFills(address, startTime);
@@ -70,7 +70,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* Contenu selon la chaîne sélectionnée */}
+      {/* Contenu Hyperliquid */}
       {activeChain === 'hyperliquid' && (
         <>
           {fills.length > 0 && (
@@ -82,8 +82,14 @@ export default function App() {
               />
               <VolumeStats stats={stats} />
               <VolumeChart fills={filteredFills} />
-              <div className="mt-4 pb-8">
+              <div className="mt-4">
                 <TradeTable fills={filteredFills} />
+              </div>
+
+              {/* Panneau Funding */}
+              <div className="mt-6 pb-8">
+                <h2 className="text-sm font-medium text-gray-400 px-4 mb-3">💰 Funding Perps</h2>
+                <FundingPanel address={walletAddress} startTime={null} />
               </div>
             </>
           )}
@@ -95,9 +101,5 @@ export default function App() {
         </>
       )}
 
-      {activeChain === 'megaeth' && (
-        <MegaEthTab address={walletAddress} />
-      )}
-    </div>
-  );
-}
+      {/* Contenu MegaETH */}
+      {activeChain ===
