@@ -36,6 +36,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+
       {/* Header */}
       <div className="border-b border-gray-800 px-4 py-4">
         <h1 className="text-xl font-bold text-white">Perp Tracker</h1>
@@ -89,11 +90,11 @@ export default function App() {
               {/* Panneau Funding */}
               <div className="mt-6 pb-8">
                 <h2 className="text-sm font-medium text-gray-400 px-4 mb-3">💰 Funding Perps</h2>
-                <FundingPanel  
+                <FundingPanel
                   key={walletAddress}
                   address={walletAddress}
                   startTime={null}
-                  />
+                />
               </div>
             </>
           )}
@@ -106,4 +107,10 @@ export default function App() {
       )}
 
       {/* Contenu MegaETH */}
-      {activeChain ===
+      {activeChain === 'megaeth' && (
+        <MegaEthTab address={walletAddress} />
+      )}
+
+    </div>
+  );
+}
