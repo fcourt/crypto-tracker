@@ -19,7 +19,6 @@ function getFillProtocol(coin) {
   return 'hyperliquid';
 }
 
-// Parse proprement un nombre qui peut être string avec . ou ,
 function safeFloat(val) {
   if (val === null || val === undefined) return 0;
   const str = String(val).replace(',', '.');
@@ -34,7 +33,6 @@ async function fetchHLData(address) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'userFills', user: address }),
     }),
-    // userFunding retourne TOUT l'historique funding y compris positions ouvertes
     fetch(HL_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -64,6 +62,17 @@ async function fetchHLData(address) {
   return { fills: fills || [], funding: funding || [], state };
 }
 
+export async function fetchSubAccounts(masterAddress) {
+  const res = await fetch(HL_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'subAccounts', user: masterAddress }),
+  });
+  if (!res.ok) throw new Error(`subAccounts HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 export async function fetchPerpDexData(address, selectedProtocols) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
     throw new Error('Adresse invalide');
@@ -71,33 +80,22 @@ export async function fetchPerpDexData(address, selectedProtocols) {
 
   const { fills, funding, state } = await fetchHLData(address);
 
-  // Récupère le solde USDE depuis les balances cross-margin
-  // state.crossMarginSummary.accountValue = valeur totale en USD
-  // state.assetPositions = positions ouvertes
-  // Pour USDE spécifiquement : cherche dans les balances
   let usdeBalance = 0;
   let usdcBalance = 0;
 
   if (state?.crossMarginSummary) {
-    // accountValue inclut USDC + USDE + PnL non réalisé
     const accountValue    = safeFloat(state.crossMarginSummary.accountValue);
     const totalMarginUsed = safeFloat(state.crossMarginSummary.totalMarginUsed);
     usdcBalance = accountValue - totalMarginUsed;
   }
 
-  // Cherche USDE dans les withdrawable ou dans les token balances
   if (state?.withdrawable) {
     usdeBalance = safeFloat(state.withdrawable);
   }
 
-  // Certaines versions de l'API retournent les balances séparément
   if (Array.isArray(state?.balances)) {
-    const usde = state.balances.find(b =>
-      (b.coin || b.token || '').toUpperCase() === 'USDE'
-    );
-    const usdc = state.balances.find(b =>
-      (b.coin || b.token || '').toUpperCase() === 'USDC'
-    );
+    const usde = state.balances.find(b => (b.coin || b.token || '').toUpperCase() === 'USDE');
+    const usdc = state.balances.find(b => (b.coin || b.token || '').toUpperCase() === 'USDC');
     if (usde) usdeBalance = safeFloat(usde.hold || usde.total || usde.balance);
     if (usdc) usdcBalance = safeFloat(usdc.hold || usdc.total || usdc.balance);
   }
@@ -128,7 +126,6 @@ export async function fetchPerpDexData(address, selectedProtocols) {
       acc + safeFloat(f.px) * safeFloat(f.sz), 0
     );
 
-    // Margin disponible : USDE pour HyENA, USDC pour les autres
     let marginAvailable = 0;
     if (['hyperliquid', 'xyz', 'hyena'].includes(protocolId)) {
       marginAvailable = protocolId === 'hyena' ? usdeBalance : usdcBalance;
@@ -147,4 +144,30 @@ export async function fetchPerpDexData(address, selectedProtocols) {
   });
 
   return results;
+}
+
+export async function fetchPerpDexDataWithSubs(address, selectedProtocols, includeSubAccounts = false) {
+  const mainData = await fetchPerpDexData(address, selectedProtocols);
+
+  if (!includeSubAccounts) return { main: mainData, subAccounts: [] };
+
+  let subAccounts = [];
+  try {
+    subAccounts = await fetchSubAccounts(address);
+  } catch (e) {
+    console.warn('Impossible de récupérer les sub-accounts:', e.message);
+  }
+
+  const subData = await Promise.all(
+    subAccounts.map(async sub => {
+      try {
+        const d = await fetchPerpDexData(sub.subAccountUser, selectedProtocols);
+        return { address: sub.subAccountUser, name: sub.name || 'Sub-account', data: d };
+      } catch (e) {
+        return { address: sub.subAccountUser, name: sub.name, data: null, error: e.message };
+      }
+    })
+  );
+
+  return { main: mainData, subAccounts: subData };
 }
