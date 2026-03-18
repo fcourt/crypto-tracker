@@ -6,21 +6,25 @@ import VolumeChart from './components/VolumeChart';
 import TradeTable from './components/TradeTable';
 import MegaEthTab from './components/MegaEthTab';
 import FundingPanel from './components/FundingPanel';
+import PerpDexPage from './pages/PerpDexPage';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
+const TABS = [
+  { id: 'hyperliquid', label: '⚡ Hyperliquid' },
+  { id: 'megaeth',     label: '🔷 MegaETH' },
+  { id: 'perpdex',     label: '📊 PerpDex' },
+];
+
 export default function App() {
   const { fills, loading, error, fetchFills } = useHyperliquidFills();
+  const [activeTab, setActiveTab]         = useState('hyperliquid');
   const [activePlatform, setActivePlatform] = useState('all');
-  const [activeChain, setActiveChain] = useState('hyperliquid');
   const [walletAddress, setWalletAddress] = useState('');
 
-  const filteredFills = useMemo(() => {
-    return filterByPlatform(fills, activePlatform);
-  }, [fills, activePlatform]);
-
+  const filteredFills = useMemo(() =>
+    filterByPlatform(fills, activePlatform), [fills, activePlatform]);
   const stats = useMemo(() => computeStats(filteredFills), [filteredFills]);
-
   const countByPlatform = useMemo(() => ({
     all:         fills.length,
     hyperliquid: fills.filter(f => getPlatform(f.coin) === 'hyperliquid').length,
@@ -37,43 +41,37 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
 
-      {/* Header */}
-      <div className="border-b border-gray-800 px-4 py-4">
-        <h1 className="text-xl font-bold text-white">Perp Tracker</h1>
-        <p className="text-gray-500 text-sm">Hyperliquid · trade.xyz · HyENA · MegaETH</p>
-      </div>
-
-      {/* Wallet Search */}
-      <WalletInput onSearch={handleSearch} loading={loading} />
-
-      {error && (
-        <div className="mx-4 mb-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-400 text-sm">
-          {error}
+      {/* Header + Onglets */}
+      <div className="border-b border-gray-800">
+        <div className="px-4 pt-4 pb-0">
+          <h1 className="text-xl font-bold text-white">Perp Tracker</h1>
         </div>
-      )}
-
-      {/* Sélecteur de chaîne principal */}
-      <div className="flex gap-2 px-4 mt-2 mb-4">
-        {[
-          { id: 'hyperliquid', label: '⚡ Hyperliquid Perps' },
-          { id: 'megaeth',     label: '🔷 MegaETH' },
-        ].map(chain => (
-          <button
-            key={chain.id}
-            onClick={() => setActiveChain(chain.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
-              ${activeChain === chain.id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-          >
-            {chain.label}
-          </button>
-        ))}
+        <div className="flex gap-1 px-4 mt-3">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-2.5 text-sm font-medium rounded-t-lg transition-colors border-b-2 ${
+                activeTab === tab.id
+                  ? 'bg-gray-800 text-white border-blue-500'
+                  : 'bg-transparent text-gray-500 border-transparent hover:text-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Contenu Hyperliquid */}
-      {activeChain === 'hyperliquid' && (
-        <>
+      {/* Onglet Hyperliquid */}
+      {activeTab === 'hyperliquid' && (
+        <div className="pt-4">
+          <WalletInput onSearch={handleSearch} loading={loading} />
+          {error && (
+            <div className="mx-4 mb-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-400 text-sm">
+              {error}
+            </div>
+          )}
           {fills.length > 0 && (
             <>
               <PlatformTabs
@@ -86,8 +84,6 @@ export default function App() {
               <div className="mt-4">
                 <TradeTable fills={filteredFills} />
               </div>
-
-              {/* Panneau Funding */}
               <div className="mt-6 pb-8">
                 <h2 className="text-sm font-medium text-gray-400 px-4 mb-3">💰 Funding Perps</h2>
                 <FundingPanel
@@ -103,12 +99,21 @@ export default function App() {
               Entrez une adresse wallet pour commencer
             </div>
           )}
-        </>
+        </div>
       )}
 
-      {/* Contenu MegaETH */}
-      {activeChain === 'megaeth' && (
-        <MegaEthTab address={walletAddress} />
+      {/* Onglet MegaETH */}
+      {activeTab === 'megaeth' && (
+        <div className="pt-4">
+          <MegaEthTab address={walletAddress} />
+        </div>
+      )}
+
+      {/* Onglet PerpDex */}
+      {activeTab === 'perpdex' && (
+        <div className="pt-4">
+          <PerpDexPage />
+        </div>
       )}
 
     </div>
