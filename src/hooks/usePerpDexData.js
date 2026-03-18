@@ -13,6 +13,7 @@ export { PROTOCOLS };
 
 // Détecte le protocole d'un fill par son préfixe de coin
 function getFillProtocol(coin) {
+  if (!coin || typeof coin !== 'string') return 'other';
   if (coin.startsWith('xyz:'))  return 'xyz';
   if (coin.startsWith('hyna:')) return 'hyena';
   if (coin.includes(':'))       return 'other';
