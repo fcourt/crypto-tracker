@@ -11,13 +11,20 @@ const PROTOCOLS = [
 
 export { PROTOCOLS };
 
-// Détecte le protocole d'un fill par son préfixe de coin
 function getFillProtocol(coin) {
   if (!coin || typeof coin !== 'string') return 'other';
   if (coin.startsWith('xyz:'))  return 'xyz';
   if (coin.startsWith('hyna:')) return 'hyena';
   if (coin.includes(':'))       return 'other';
   return 'hyperliquid';
+}
+
+// Parse proprement un nombre qui peut être string avec . ou ,
+function safeFloat(val) {
+  if (val === null || val === undefined) return 0;
+  const str = String(val).replace(',', '.');
+  const n = parseFloat(str);
+  return isNaN(n) ? 0 : n;
 }
 
 async function fetchHLData(address) {
@@ -27,6 +34,7 @@ async function fetchHLData(address) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'userFills', user: address }),
     }),
+    // userFunding retourne TOUT l'historique funding y compris positions ouvertes
     fetch(HL_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +58,9 @@ async function fetchHLData(address) {
     stateRes.json(),
   ]);
 
+  console.log('HL State sample:', JSON.stringify(state, null, 2));
+  console.log('Funding sample:', JSON.stringify((funding || []).slice(0, 3), null, 2));
+
   return { fills: fills || [], funding: funding || [], state };
 }
 
@@ -60,19 +71,48 @@ export async function fetchPerpDexData(address, selectedProtocols) {
 
   const { fills, funding, state } = await fetchHLData(address);
 
+  // Récupère le solde USDE depuis les balances cross-margin
+  // state.crossMarginSummary.accountValue = valeur totale en USD
+  // state.assetPositions = positions ouvertes
+  // Pour USDE spécifiquement : cherche dans les balances
+  let usdeBalance = 0;
+  let usdcBalance = 0;
+
+  if (state?.crossMarginSummary) {
+    // accountValue inclut USDC + USDE + PnL non réalisé
+    const accountValue    = safeFloat(state.crossMarginSummary.accountValue);
+    const totalMarginUsed = safeFloat(state.crossMarginSummary.totalMarginUsed);
+    usdcBalance = accountValue - totalMarginUsed;
+  }
+
+  // Cherche USDE dans les withdrawable ou dans les token balances
+  if (state?.withdrawable) {
+    usdeBalance = safeFloat(state.withdrawable);
+  }
+
+  // Certaines versions de l'API retournent les balances séparément
+  if (Array.isArray(state?.balances)) {
+    const usde = state.balances.find(b =>
+      (b.coin || b.token || '').toUpperCase() === 'USDE'
+    );
+    const usdc = state.balances.find(b =>
+      (b.coin || b.token || '').toUpperCase() === 'USDC'
+    );
+    if (usde) usdeBalance = safeFloat(usde.hold || usde.total || usde.balance);
+    if (usdc) usdcBalance = safeFloat(usdc.hold || usdc.total || usdc.balance);
+  }
+
   const results = {};
 
   selectedProtocols.forEach(protocolId => {
-    // Filtre les fills selon le protocole
     const protocolFills = fills.filter(f => {
       const fp = getFillProtocol(f.coin);
       if (protocolId === 'hyperliquid') return fp === 'hyperliquid';
       if (protocolId === 'xyz')         return fp === 'xyz';
       if (protocolId === 'hyena')       return fp === 'hyena';
-      return false; // extended, variational, legend : pas encore d'API
+      return false;
     });
 
-    // Filtre le funding selon le protocole
     const protocolFunding = funding.filter(f => {
       const fp = getFillProtocol(f.coin);
       if (protocolId === 'hyperliquid') return fp === 'hyperliquid';
@@ -81,19 +121,17 @@ export async function fetchPerpDexData(address, selectedProtocols) {
       return false;
     });
 
-    // Calculs
-    const pnl   = protocolFills.reduce((acc, f) => acc + parseFloat(f.closedPnl || 0), 0);
-    const fees  = protocolFills.reduce((acc, f) => acc + parseFloat(f.fee || 0), 0);
-    const fundingNet = protocolFunding.reduce((acc, f) => acc + parseFloat(f.usdc || 0), 0);
-    const volume = protocolFills.reduce((acc, f) =>
-      acc + parseFloat(f.px) * parseFloat(f.sz), 0
+    const pnl        = protocolFills.reduce((acc, f) => acc + safeFloat(f.closedPnl), 0);
+    const fees       = protocolFills.reduce((acc, f) => acc + safeFloat(f.fee), 0);
+    const fundingNet = protocolFunding.reduce((acc, f) => acc + safeFloat(f.usdc), 0);
+    const volume     = protocolFills.reduce((acc, f) =>
+      acc + safeFloat(f.px) * safeFloat(f.sz), 0
     );
 
-    // Margin disponible depuis clearinghouseState
+    // Margin disponible : USDE pour HyENA, USDC pour les autres
     let marginAvailable = 0;
-    if (state?.crossMarginSummary && (protocolId === 'hyperliquid' || protocolId === 'xyz' || protocolId === 'hyena')) {
-      marginAvailable = parseFloat(state.crossMarginSummary.accountValue || 0)
-        - parseFloat(state.crossMarginSummary.totalMarginUsed || 0);
+    if (['hyperliquid', 'xyz', 'hyena'].includes(protocolId)) {
+      marginAvailable = protocolId === 'hyena' ? usdeBalance : usdcBalance;
     }
 
     results[protocolId] = {
@@ -103,7 +141,8 @@ export async function fetchPerpDexData(address, selectedProtocols) {
       volume,
       marginAvailable,
       tradeCount: protocolFills.length,
-      available: protocolId !== 'extended' && protocolId !== 'variational' && protocolId !== 'legend',
+      available: ['hyperliquid', 'xyz', 'hyena'].includes(protocolId),
+      marginToken: protocolId === 'hyena' ? 'USDE' : 'USDC',
     };
   });
 
