@@ -104,10 +104,16 @@ export default function App() {
 
       {/* Onglet MegaETH */}
       {activeTab === 'megaeth' && (
-        <div className="pt-4">
-          <MegaEthTab address={walletAddress} />
+      <div className="pt-4">
+        <WalletInput onSearch={handleSearch} loading={loading} />
+        {error && (
+        <div className="mx-4 mb-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-red-400 text-sm">
+          {error}
         </div>
       )}
+        <MegaEthTab address={walletAddress} />
+      </div>
+    )}
 
       {/* Onglet PerpDex */}
       {activeTab === 'perpdex' && (
