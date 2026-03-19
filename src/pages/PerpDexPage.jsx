@@ -1,28 +1,46 @@
 import { useState } from 'react';
 import PerpDexCard from '../components/PerpDexCard';
+import PerpDexSummary from '../components/PerpDexSummary';
 import PeriodFilter, { getDateRange } from '../components/PeriodFilter';
 
-const CARD_COUNT = 2;
-
 export default function PerpDexPage() {
-  const [period, setPeriod] = useState('all');
+  const [cardsData, setCardsData] = useState([null, null, null, null]);
+  const [period, setPeriod]       = useState({ type: 'all' });
+
   const dateRange = getDateRange(period);
 
-  return (
-    <div className="px-4 pb-8 flex flex-col gap-4">
+  const handleDataChange = (cardIndex, data) => {
+    setCardsData(prev => {
+      const next = [...prev];
+      next[cardIndex] = data;
+      return next;
+    });
+  };
 
-      {/* Barre filtre période */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">
-          Perp DEX
-        </h2>
+  return (
+    <div className="space-y-4 pb-8">
+
+      {/* Filtre période */}
+      <div className="px-4 pt-2">
         <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {/* Cartes */}
-      {Array.from({ length: CARD_COUNT }).map((_, i) => (
-        <PerpDexCard key={i} cardIndex={i} dateRange={dateRange} />
-      ))}
+      {/* 4 cartes — 2 par ligne */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-4">
+        {[0, 1, 2, 3].map(i => (
+          <PerpDexCard
+            key={i}
+            cardIndex={i}
+            onDataChange={handleDataChange}
+            dateRange={dateRange}
+          />
+        ))}
+      </div>
+
+      {/* Carte synthèse */}
+      <div className="px-4">
+        <PerpDexSummary cardsData={cardsData} />
+      </div>
 
     </div>
   );
