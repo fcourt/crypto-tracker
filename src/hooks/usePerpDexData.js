@@ -21,9 +21,20 @@ function getFillProtocol(coin) {
 
 function safeFloat(val) {
   if (val === null || val === undefined) return 0;
-  const str = String(val).replace(',', '.');
-  const n = parseFloat(str);
+  const n = parseFloat(String(val).replace(',', '.'));
   return isNaN(n) ? 0 : n;
+}
+
+// Filtre un tableau d'items par plage de dates
+// dateField : nom du champ timestamp (en ms ou en secondes)
+export function filterByDate(items, dateField, dateRange) {
+  if (!dateRange?.from || !Array.isArray(items)) return items;
+  return items.filter(item => {
+    const ts = item[dateField];
+    if (ts === undefined || ts === null) return false;
+    const d = new Date(ts > 1e12 ? ts : ts * 1000);
+    return d >= dateRange.from && d <= dateRange.to;
+  });
 }
 
 async function fetchHLData(address) {
@@ -56,9 +67,6 @@ async function fetchHLData(address) {
     stateRes.json(),
   ]);
 
-  console.log('HL State sample:', JSON.stringify(state, null, 2));
-  console.log('Funding sample:', JSON.stringify((funding || []).slice(0, 3), null, 2));
-
   return { fills: fills || [], funding: funding || [], state };
 }
 
@@ -73,12 +81,16 @@ export async function fetchSubAccounts(masterAddress) {
   return Array.isArray(data) ? data : [];
 }
 
-export async function fetchPerpDexData(address, selectedProtocols) {
+export async function fetchPerpDexData(address, selectedProtocols, dateRange) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
     throw new Error('Adresse invalide');
   }
 
   const { fills, funding, state } = await fetchHLData(address);
+
+  // Filtrage par période sur le champ 'time' (ms dans l'API HL)
+  const filteredFills   = filterByDate(fills,   'time', dateRange);
+  const filteredFunding = filterByDate(funding, 'time', dateRange);
 
   let usdeBalance = 0;
   let usdcBalance = 0;
@@ -88,11 +100,9 @@ export async function fetchPerpDexData(address, selectedProtocols) {
     const totalMarginUsed = safeFloat(state.crossMarginSummary.totalMarginUsed);
     usdcBalance = accountValue - totalMarginUsed;
   }
-
   if (state?.withdrawable) {
     usdeBalance = safeFloat(state.withdrawable);
   }
-
   if (Array.isArray(state?.balances)) {
     const usde = state.balances.find(b => (b.coin || b.token || '').toUpperCase() === 'USDE');
     const usdc = state.balances.find(b => (b.coin || b.token || '').toUpperCase() === 'USDC');
@@ -103,7 +113,7 @@ export async function fetchPerpDexData(address, selectedProtocols) {
   const results = {};
 
   selectedProtocols.forEach(protocolId => {
-    const protocolFills = fills.filter(f => {
+    const protocolFills = filteredFills.filter(f => {
       const fp = getFillProtocol(f.coin);
       if (protocolId === 'hyperliquid') return fp === 'hyperliquid';
       if (protocolId === 'xyz')         return fp === 'xyz';
@@ -111,7 +121,7 @@ export async function fetchPerpDexData(address, selectedProtocols) {
       return false;
     });
 
-    const protocolFunding = funding.filter(f => {
+    const protocolFunding = filteredFunding.filter(f => {
       const fp = getFillProtocol(f.coin);
       if (protocolId === 'hyperliquid') return fp === 'hyperliquid';
       if (protocolId === 'xyz')         return fp === 'xyz';
@@ -146,8 +156,8 @@ export async function fetchPerpDexData(address, selectedProtocols) {
   return results;
 }
 
-export async function fetchPerpDexDataWithSubs(address, selectedProtocols, includeSubAccounts = false) {
-  const mainData = await fetchPerpDexData(address, selectedProtocols);
+export async function fetchPerpDexDataWithSubs(address, selectedProtocols, includeSubAccounts = false, dateRange) {
+  const mainData = await fetchPerpDexData(address, selectedProtocols, dateRange);
 
   if (!includeSubAccounts) return { main: mainData, subAccounts: [] };
 
@@ -161,7 +171,7 @@ export async function fetchPerpDexDataWithSubs(address, selectedProtocols, inclu
   const subData = await Promise.all(
     subAccounts.map(async sub => {
       try {
-        const d = await fetchPerpDexData(sub.subAccountUser, selectedProtocols);
+        const d = await fetchPerpDexData(sub.subAccountUser, selectedProtocols, dateRange);
         return { address: sub.subAccountUser, name: sub.name || 'Sub-account', data: d };
       } catch (e) {
         return { address: sub.subAccountUser, name: sub.name, data: null, error: e.message };
