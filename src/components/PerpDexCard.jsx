@@ -29,24 +29,29 @@ function ProtocolStats({ protocolId, d }) {
   return (
     <div className={`rounded-xl border p-3 ${COLOR_MAP[proto?.color] || 'bg-gray-900 border-gray-700'}`}>
       <div className="flex items-center justify-between mb-3">
-        <a href={proto?.url} target="_blank" rel="noreferrer"
-          className="text-sm font-bold text-white hover:underline">
+        <a
+          href={proto?.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm font-bold text-white hover:underline"
+        >
           {proto?.label}
         </a>
         <span className="text-xs text-gray-500">{d.tradeCount} trades</span>
       </div>
       {d.available ? (
         <div className="grid grid-cols-5 gap-2">
-          <StatCard label="PnL réalisé"  value={`${fmtS(d.pnl)} $`}        color={d.pnl >= 0 ? 'text-green-400' : 'text-red-400'} />
-          <StatCard label="Fees"         value={`-${fmt(d.fees)} $`}        color="text-red-400" />
-          <StatCard label="Funding net"  value={`${fmtS(d.fundingNet)} $`}  color={d.fundingNet >= 0 ? 'text-green-400' : 'text-red-400'} />
-          <StatCard label="Volume"       value={`${fmt(d.volume)} $`}       color="text-white" />
+          <StatCard label="PnL réalisé"  value={`${fmtS(d.pnl)} $`}       color={d.pnl >= 0 ? 'text-green-400' : 'text-red-400'} />
+          <StatCard label="Fees"         value={`-${fmt(d.fees)} $`}       color="text-red-400" />
+          <StatCard label="Funding net"  value={`${fmtS(d.fundingNet)} $`} color={d.fundingNet >= 0 ? 'text-green-400' : 'text-red-400'} />
+          <StatCard label="Volume"       value={`${fmt(d.volume)} $`}      color="text-white" />
           <StatCard label={`Margin (${d.marginToken})`} value={`${fmt(d.marginAvailable)}`} color="text-blue-300" />
         </div>
       ) : (
         <p className="text-gray-600 text-xs">
           {protocolId === 'variational' && 'Protocole OTC/RFQ — pas de données publiques'}
           {protocolId === 'legend'      && 'Données non accessibles via API publique'}
+          {protocolId === 'extended'    && 'Sélectionnez Extended seul pour saisir votre clé API'}
         </p>
       )}
     </div>
@@ -54,12 +59,16 @@ function ProtocolStats({ protocolId, d }) {
 }
 
 function WalletSection({ label, address, data }) {
+  const isHex = address.startsWith('0x');
+  const displayAddr = isHex
+    ? `${address.slice(0, 8)}...${address.slice(-4)}`
+    : address;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="flex-1 h-px bg-gray-700" />
         <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
-          {label} — {address.slice(0, 8)}...{address.slice(-4)}
+          {label} — {displayAddr}
         </span>
         <div className="flex-1 h-px bg-gray-700" />
       </div>
@@ -70,11 +79,11 @@ function WalletSection({ label, address, data }) {
   );
 }
 
-// Protocoles wallet (nécessitent une adresse 0x)
+// Protocoles nécessitant une adresse wallet
 const WALLET_PROTOCOLS = ['hyperliquid', 'xyz', 'hyena', 'variational', 'legend'];
 
 export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
-  const [inputValue, setInputValue]          = useState('');  // adresse OU clé API
+  const [inputValue, setInputValue]          = useState('');
   const [selectedProtocols, setSelected]     = useState(['hyperliquid', 'xyz', 'hyena']);
   const [includeSubAccounts, setIncludeSubs] = useState(false);
   const [result, setResult]                  = useState(null);
@@ -82,27 +91,21 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
   const [error, setError]                    = useState(null);
   const [savedWallets, setSavedWallets]      = useState(getSavedWallets());
   const [label, setLabel]                    = useState('');
+
+  // Guard : ne re-fetch que si un chargement a déjà eu lieu
   const hasLoaded = useRef(false);
 
-  // Extended seul sélectionné ?
-  const onlyExtended = selectedProtocols.length === 1 && selectedProtocols[0] === 'extended';
-  // Extended parmi d'autres ?
-  const extendedSelected = selectedProtocols.includes('extended');
-  // Protocoles wallet dans la sélection
-  const walletProtocols = selectedProtocols.filter(p => WALLET_PROTOCOLS.includes(p));
-
-  const isApiKeyMode = onlyExtended;
-  const placeholder  = isApiKeyMode ? 'Clé API Extended...' : '0x...';
+  // Extended seul sélectionné → mode clé API
+  const onlyExtended = selectedProtocols.length === 1
+                    && selectedProtocols[0] === 'extended';
 
   const toggleProtocol = (id) =>
     setSelected(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
 
-  const handleSearch = async (valOverride, protosOverride, rangeOverride) => {
-    const val      = valOverride   ?? inputValue.trim();
-    const protos   = protosOverride ?? selectedProtocols;
-    const range    = rangeOverride  ?? dateRange;
+  const handleSearch = async () => {
+    const val = inputValue.trim();
     if (!val) return;
 
     setLoading(true);
@@ -110,36 +113,28 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
     setResult(null);
 
     try {
-      const results = {};
+      let data;
 
-      // Fetch wallet protocols (HL, xyz, hyena...)
-      const wProtos = protos.filter(p => WALLET_PROTOCOLS.includes(p));
-      if (wProtos.length > 0) {
-        const walletData = await fetchPerpDexDataWithSubs(val, wProtos, includeSubAccounts, range);
-        // Fusionner dans results
-        Object.assign(results, walletData.main ?? walletData);
-        // Stocker subAccounts séparément
-        results.__subAccounts = walletData.subAccounts ?? [];
-        results.__address     = val;
+      if (onlyExtended) {
+        // Mode clé API : fetch Extended uniquement
+        const extData = await fetchExtendedData(val);
+        data = {
+          main:        { extended: extData },
+          subAccounts: [],
+        };
+      } else {
+        // Mode wallet : fetch protocoles wallet normalement
+        const walletProtos = selectedProtocols.filter(p =>
+          WALLET_PROTOCOLS.includes(p)
+        );
+        data = await fetchPerpDexDataWithSubs(
+          val, walletProtos, includeSubAccounts, dateRange
+        );
       }
 
-      // Fetch Extended séparément si sélectionné
-      if (protos.includes('extended')) {
-        // Si onlyExtended, val = clé API ; sinon il faut une clé stockée
-        const apiKey = onlyExtended
-          ? val
-          : (localStorage.getItem('extended_last_key') || '');
-        if (apiKey) {
-          const extData = await fetchExtendedData(apiKey);
-          results['extended'] = extData;
-          if (onlyExtended) localStorage.setItem('extended_last_key', apiKey);
-        } else {
-          results['extended'] = { available: false, tradeCount: 0, pnl: 0, fees: 0, fundingNet: 0, volume: 0, marginAvailable: 0, marginToken: 'USDC' };
-        }
-      }
-
-      setResult(results);
-      onDataChange?.(cardIndex, results);
+      setResult(data);
+      // onDataChange reçoit data.main — structure identique à avant
+      onDataChange?.(cardIndex, data.main);
       hasLoaded.current = true;
     } catch (e) {
       setError(e.message);
@@ -148,28 +143,18 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
     }
   };
 
-  // Re-fetch auto quand la période change
+  // Re-fetch automatique quand dateRange change — seulement si déjà chargé
   useEffect(() => {
-    if (hasLoaded.current && inputValue.trim()) {
-      handleSearch(inputValue.trim(), selectedProtocols, dateRange);
-    }
+    if (!hasLoaded.current || !inputValue.trim() || onlyExtended) return;
+    handleSearch();
   }, [dateRange]);
 
   const handleSave = () => {
-    if (!inputValue.trim() || isApiKeyMode) return;
+    if (!inputValue.trim() || onlyExtended) return;
     saveWallet(inputValue.trim(), label);
     setSavedWallets(getSavedWallets());
     setLabel('');
   };
-
-  // Extraire subAccounts et address du result
-  const subAccounts = result?.__subAccounts ?? [];
-  const address     = result?.__address ?? inputValue.trim();
-  const mainData    = result
-    ? Object.fromEntries(
-        Object.entries(result).filter(([k]) => !k.startsWith('__'))
-      )
-    : null;
 
   return (
     <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-3">
@@ -182,15 +167,14 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
       {/* Saisie */}
       <div className="flex gap-2 items-center flex-wrap">
         <input
-          type={isApiKeyMode ? 'password' : 'text'}
+          type={onlyExtended ? 'password' : 'text'}
           value={inputValue}
           onChange={e => setInputValue(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSearch()}
-          placeholder={placeholder}
+          placeholder={onlyExtended ? 'Clé API Extended...' : '0x...'}
           className="flex-1 min-w-0 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500"
         />
-        {/* Wallets sauvegardés — masqués en mode API key */}
-        {!isApiKeyMode && savedWallets.length > 0 && (
+        {!onlyExtended && savedWallets.length > 0 && (
           <select
             onChange={e => setInputValue(e.target.value)}
             defaultValue=""
@@ -202,7 +186,7 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
             ))}
           </select>
         )}
-        {!isApiKeyMode && (
+        {!onlyExtended && (
           <>
             <input
               type="text"
@@ -221,13 +205,20 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
           </>
         )}
         <button
-          onClick={() => handleSearch()}
+          onClick={handleSearch}
           disabled={loading || !inputValue}
           className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
         >
           {loading ? '...' : 'Charger'}
         </button>
       </div>
+
+      {/* Hint mode clé API */}
+      {onlyExtended && (
+        <p className="text-gray-600 text-xs -mt-1">
+          🔒 Clé API en lecture seule — aucun accès aux fonds.
+        </p>
+      )}
 
       {/* Protocoles + sub-accounts */}
       <div className="flex flex-wrap gap-1.5 items-center justify-between">
@@ -260,34 +251,20 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
         </label>
       </div>
 
-      {/* Hint mode clé API */}
-      {isApiKeyMode && (
-        <p className="text-gray-600 text-xs -mt-1">
-          🔒 Clé API en lecture seule — aucun accès aux fonds.
-        </p>
-      )}
-
-      {/* Hint Extended + wallet */}
-      {extendedSelected && !onlyExtended && (
-        <p className="text-yellow-600 text-xs -mt-1">
-          ⚠️ Extended sélectionné avec d'autres protocoles — saisissez votre adresse wallet. La clé API Extended sera lue depuis la dernière saisie.
-        </p>
-      )}
-
       {/* Erreur */}
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
-      {/* Résultats — compte principal */}
-      {mainData && address && (
+      {/* Compte principal */}
+      {result?.main && (
         <WalletSection
-          label={subAccounts.length > 0 ? 'Compte principal' : 'Wallet'}
-          address={isApiKeyMode ? '🔑 Extended' : address}
-          data={mainData}
+          label={result.subAccounts.length > 0 ? 'Compte principal' : 'Wallet'}
+          address={onlyExtended ? '🔑 Extended' : inputValue.trim()}
+          data={result.main}
         />
       )}
 
       {/* Sub-accounts */}
-      {subAccounts.length > 0 && subAccounts.map((sub) => (
+      {result?.subAccounts?.length > 0 && result.subAccounts.map((sub) => (
         <div key={sub.address}>
           {sub.error ? (
             <p className="text-red-400 text-xs px-2">
@@ -304,7 +281,7 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
       ))}
 
       {/* Aucun sub-account */}
-      {result && includeSubAccounts && subAccounts.length === 0 && !isApiKeyMode && (
+      {result && includeSubAccounts && result.subAccounts.length === 0 && !onlyExtended && (
         <p className="text-gray-600 text-xs text-center py-1">
           Aucun sub-account trouvé pour ce wallet.
         </p>
