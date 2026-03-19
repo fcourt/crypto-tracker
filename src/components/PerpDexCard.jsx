@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { fetchPerpDexDataWithSubs, PROTOCOLS } from '../hooks/usePerpDexData';
 import { getSavedWallets, saveWallet } from '../hooks/useWalletStorage';
 import ExtendedPanel from './ExtendedPanel';
-
 
 const fmt  = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n);
 const fmtS = (n) => (n >= 0 ? '+' : '') + fmt(n);
@@ -69,7 +68,6 @@ function ProtocolStats({ protocolId, d }) {
           />
         </div>
       ) : protocolId === 'extended' ? (
-        // ✅ Extended : saisie clé API directement dans la carte
         <ExtendedPanel />
       ) : (
         <p className="text-gray-600 text-xs">
@@ -98,7 +96,7 @@ function WalletSection({ label, address, data }) {
   );
 }
 
-export default function PerpDexCard({ cardIndex, onDataChange }) {
+export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
   const [inputAddress, setInputAddress]      = useState('');
   const [selectedProtocols, setSelected]     = useState(['hyperliquid', 'xyz', 'hyena']);
   const [includeSubAccounts, setIncludeSubs] = useState(false);
@@ -108,27 +106,40 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
   const [savedWallets, setSavedWallets]      = useState(getSavedWallets());
   const [label, setLabel]                    = useState('');
 
+  // Référence pour savoir si un wallet est déjà chargé
+  const hasAddress = useRef(false);
+
   const toggleProtocol = (id) =>
     setSelected(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
 
-  const handleSearch = async () => {
-    const addr = inputAddress.trim();
-    if (!addr) return;
+  const handleSearch = async (addr, protos, dateRangeOverride) => {
+    const address  = addr  ?? inputAddress.trim();
+    const protocols = protos ?? selectedProtocols;
+    const range    = dateRangeOverride ?? dateRange;
+    if (!address) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const data = await fetchPerpDexDataWithSubs(addr, selectedProtocols, includeSubAccounts);
+      const data = await fetchPerpDexDataWithSubs(address, protocols, includeSubAccounts, range);
       setResult(data);
       onDataChange?.(cardIndex, data.main);
+      hasAddress.current = true;
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // Re-fetch automatique quand la période change (uniquement si wallet déjà chargé)
+  useEffect(() => {
+    if (hasAddress.current && inputAddress.trim()) {
+      handleSearch(inputAddress.trim(), selectedProtocols, dateRange);
+    }
+  }, [dateRange]);
 
   const handleSave = () => {
     if (!inputAddress.trim()) return;
@@ -145,7 +156,7 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
         Wallet #{cardIndex + 1}
       </p>
 
-      {/* Saisie — une seule ligne */}
+      {/* Saisie */}
       <div className="flex gap-2 items-center flex-wrap">
         <input
           type="text"
@@ -182,7 +193,7 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
           💾
         </button>
         <button
-          onClick={handleSearch}
+          onClick={() => handleSearch()}
           disabled={loading || !inputAddress}
           className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors"
         >
@@ -190,10 +201,10 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
         </button>
       </div>
 
-      {/* Protocoles + case sub-accounts */}
+      {/* Protocoles + sub-accounts */}
       <div className="flex flex-wrap gap-1.5 items-center justify-between">
         <div className="flex flex-wrap gap-1.5">
-          {PROTOCOLS.map(p => (
+          {PROTOCOLS.filter(p => p.id !== 'extended').map(p => (
             <button
               key={p.id}
               onClick={() => toggleProtocol(p.id)}
@@ -210,8 +221,6 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
             </button>
           ))}
         </div>
-
-        {/* Case à cocher sub-accounts */}
         <label className="flex items-center gap-1.5 cursor-pointer shrink-0 ml-2">
           <input
             type="checkbox"
@@ -252,12 +261,17 @@ export default function PerpDexCard({ cardIndex, onDataChange }) {
         </div>
       ))}
 
-      {/* Aucun sub-account trouvé */}
+      {/* Aucun sub-account */}
       {result && includeSubAccounts && result.subAccounts.length === 0 && (
         <p className="text-gray-600 text-xs text-center py-1">
           Aucun sub-account trouvé pour ce wallet.
         </p>
       )}
+
+      {/* Extended — toujours visible */}
+      <div className="pt-1 border-t border-gray-700">
+        <ExtendedPanel />
+      </div>
 
     </div>
   );
