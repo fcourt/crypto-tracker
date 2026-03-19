@@ -26,7 +26,7 @@ export async function fetchExtendedData(apiKey) {
   const [balance, positions, trades] = await Promise.all([
     extendedGet('/user/balance', apiKey).catch(() => null),
     extendedGet('/user/positions', apiKey).catch(() => []),
-    extendedGet('/user/trades', apiKey).catch(() => []),
+    extendedGet('/user/fills',      apiKey).catch(() => []),
   ]);
 
   // Calculs
