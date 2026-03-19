@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { fetchPerpDexDataWithSubs, PROTOCOLS } from '../hooks/usePerpDexData';
 import { getSavedWallets, saveWallet } from '../hooks/useWalletStorage';
+import ExtendedPanel from './ExtendedPanel';
+
 
 const fmt  = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 2 }).format(n);
 const fmtS = (n) => (n >= 0 ? '+' : '') + fmt(n);
@@ -66,9 +68,11 @@ function ProtocolStats({ protocolId, d }) {
             color="text-blue-300"
           />
         </div>
+      ) : protocolId === 'extended' ? (
+        // ✅ Extended : saisie clé API directement dans la carte
+        <ExtendedPanel />
       ) : (
         <p className="text-gray-600 text-xs">
-          {protocolId === 'extended'    && 'Clé API requise — voir api.docs.extended.exchange'}
           {protocolId === 'variational' && 'Protocole OTC/RFQ — pas de données publiques'}
           {protocolId === 'legend'      && 'Données non accessibles via API publique'}
         </p>
