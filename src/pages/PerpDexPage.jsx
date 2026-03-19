@@ -5,7 +5,7 @@ import PeriodFilter, { getDateRange } from '../components/PeriodFilter';
 
 export default function PerpDexPage() {
   const [cardsData, setCardsData] = useState([null, null, null, null]);
-  const [period, setPeriod]       = useState({ type: 'all' });
+  const [period,    setPeriod]    = useState({ type: 'all' });
 
   const dateRange = getDateRange(period);
 
