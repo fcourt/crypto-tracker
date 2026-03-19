@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 
 export function getDateRange(period) {
   const now = new Date();
@@ -14,7 +14,10 @@ export function getDateRange(period) {
     return { from: start, to: now };
   }
   if (period.type === 'custom' && period.from && period.to) {
-    return { from: new Date(period.from), to: new Date(period.to + 'T23:59:59') };
+    return {
+      from: new Date(period.from),
+      to:   new Date(period.to + 'T23:59:59'),
+    };
   }
   return { from: null, to: null };
 }
@@ -22,14 +25,14 @@ export function getDateRange(period) {
 export default function PeriodFilter({ value, onChange }) {
   const [showCustom, setShowCustom] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo]     = useState('');
+  const [customTo,   setCustomTo]   = useState('');
 
   const handlePreset = (type) => {
     setShowCustom(false);
     onChange({ type });
   };
 
-  const handleApplyCustom = () => {
+  const handleApply = () => {
     if (!customFrom || !customTo) return;
     onChange({ type: 'custom', from: customFrom, to: customTo });
     setShowCustom(false);
@@ -41,8 +44,6 @@ export default function PeriodFilter({ value, onChange }) {
     { type: 'week',  label: 'Cette semaine' },
   ];
 
-  const isActive = (type) => value.type === type;
-
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 flex-wrap">
@@ -53,7 +54,7 @@ export default function PeriodFilter({ value, onChange }) {
               key={p.type}
               onClick={() => handlePreset(p.type)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                isActive(p.type) && !showCustom
+                value.type === p.type && !showCustom
                   ? 'bg-blue-600 border-blue-500 text-white'
                   : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500'
               }`}
@@ -72,8 +73,6 @@ export default function PeriodFilter({ value, onChange }) {
             📅 Personnalisé
           </button>
         </div>
-
-        {/* Résumé période custom active */}
         {value.type === 'custom' && !showCustom && (
           <span className="text-xs text-blue-400">
             {value.from} → {value.to}
@@ -81,7 +80,6 @@ export default function PeriodFilter({ value, onChange }) {
         )}
       </div>
 
-      {/* Sélecteur calendrier */}
       {showCustom && (
         <div className="flex items-center gap-2 flex-wrap bg-gray-900 border border-gray-700 rounded-xl px-3 py-2">
           <span className="text-xs text-gray-500">Du</span>
@@ -99,9 +97,9 @@ export default function PeriodFilter({ value, onChange }) {
             className="bg-gray-800 border border-gray-600 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
           />
           <button
-            onClick={handleApplyCustom}
+            onClick={handleApply}
             disabled={!customFrom || !customTo}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium px-3 py-1 rounded-lg transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-medium px-3 py-1 rounded-lg"
           >
             Appliquer
           </button>
