@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchPerpDexDataWithSubs, PROTOCOLS } from '../hooks/usePerpDexData';
 import { fetchExtendedData } from '../hooks/useExtendedData';
 import { getSavedWallets, saveWallet } from '../hooks/useWalletStorage';
@@ -79,7 +79,6 @@ function WalletSection({ label, address, data }) {
   );
 }
 
-// Protocoles nécessitant une adresse wallet
 const WALLET_PROTOCOLS = ['hyperliquid', 'xyz', 'hyena', 'variational', 'legend'];
 
 export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
@@ -92,10 +91,9 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
   const [savedWallets, setSavedWallets]      = useState(getSavedWallets());
   const [label, setLabel]                    = useState('');
 
-  // Guard : ne re-fetch que si un chargement a déjà eu lieu
-  const hasLoaded = useRef(false);
+  const hasLoaded     = useRef(false);
+  const prevDateRange = useRef(null);
 
-  // Extended seul sélectionné → mode clé API
   const onlyExtended = selectedProtocols.length === 1
                     && selectedProtocols[0] === 'extended';
 
@@ -104,7 +102,7 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     const val = inputValue.trim();
     if (!val) return;
 
@@ -114,16 +112,10 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
 
     try {
       let data;
-
       if (onlyExtended) {
-        // Mode clé API : fetch Extended uniquement
         const extData = await fetchExtendedData(val);
-        data = {
-          main:        { extended: extData },
-          subAccounts: [],
-        };
+        data = { main: { extended: extData }, subAccounts: [] };
       } else {
-        // Mode wallet : fetch protocoles wallet normalement
         const walletProtos = selectedProtocols.filter(p =>
           WALLET_PROTOCOLS.includes(p)
         );
@@ -133,7 +125,6 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
       }
 
       setResult(data);
-      // onDataChange reçoit data.main — structure identique à avant
       onDataChange?.(cardIndex, data.main);
       hasLoaded.current = true;
     } catch (e) {
@@ -141,13 +132,22 @@ export default function PerpDexCard({ cardIndex, onDataChange, dateRange }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [inputValue, selectedProtocols, includeSubAccounts, dateRange, onlyExtended, cardIndex, onDataChange]);
 
-  // Re-fetch automatique quand dateRange change — seulement si déjà chargé
   useEffect(() => {
-    if (!hasLoaded.current || !inputValue.trim() || onlyExtended) return;
-    handleSearch();
-  }, [dateRange]);
+    if (prevDateRange.current === null) {
+      prevDateRange.current = dateRange;
+      return;
+    }
+    const fromChanged = prevDateRange.current?.from?.getTime() !== dateRange?.from?.getTime();
+    const toChanged   = prevDateRange.current?.to?.getTime()   !== dateRange?.to?.getTime();
+    if (fromChanged || toChanged) {
+      prevDateRange.current = dateRange;
+      if (hasLoaded.current && inputValue.trim() && !onlyExtended) {
+        handleSearch();
+      }
+    }
+  }, [dateRange, handleSearch, inputValue, onlyExtended]);
 
   const handleSave = () => {
     if (!inputValue.trim() || onlyExtended) return;
