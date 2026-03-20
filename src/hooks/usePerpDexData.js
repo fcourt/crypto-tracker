@@ -66,10 +66,6 @@ async function fetchHLData(address) {
     fundingRes.json(),
     stateRes.json(),
   ]);
-
-  // ✅ Log ici, après avoir reçu les données
-  console.log('Funding sample:', JSON.stringify((funding || []).slice(0, 2), null, 2));
-  console.log('Funding total count:', (funding || []).length);
   
   return { fills: fills || [], funding: funding || [], state };
 }
@@ -126,7 +122,7 @@ export async function fetchPerpDexData(address, selectedProtocols, dateRange) {
     });
 
     const protocolFunding = filteredFunding.filter(f => {
-      const fp = getFillProtocol(f.coin);
+      const fp = getFillProtocol(f.delta?.coin);
       if (protocolId === 'hyperliquid') return fp === 'hyperliquid';
       if (protocolId === 'xyz')         return fp === 'xyz';
       if (protocolId === 'hyena')       return fp === 'hyena';
@@ -135,7 +131,7 @@ export async function fetchPerpDexData(address, selectedProtocols, dateRange) {
 
     const pnl        = protocolFills.reduce((acc, f) => acc + safeFloat(f.closedPnl), 0);
     const fees       = protocolFills.reduce((acc, f) => acc + safeFloat(f.fee), 0);
-    const fundingNet = protocolFunding.reduce((acc, f) => acc + safeFloat(f.usdc), 0);
+    const fundingNet = protocolFunding.reduce((acc, f) => acc + safeFloat(f.delta?.usdc), 0);
     const volume     = protocolFills.reduce((acc, f) =>
       acc + safeFloat(f.px) * safeFloat(f.sz), 0
     );
