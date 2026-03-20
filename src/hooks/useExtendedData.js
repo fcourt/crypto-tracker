@@ -21,6 +21,10 @@ async function extendedGet(endpoint, apiKey) {
     throw new Error(`Extended ${res.status}: ${text}`);
   }
   const data = await res.json();
+
+  // 👇 LOG TEMPORAIRE
+  console.log(`Extended [${endpoint}]`, JSON.stringify(data, null, 2));
+  
   if (data.status === 'ERROR') throw new Error(data.error?.message || 'Extended API error');
   return data.data;
 }
