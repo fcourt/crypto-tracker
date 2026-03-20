@@ -7,14 +7,19 @@ function safeFloat(val) {
 }
 
 async function extendedGet(endpoint, apiKey) {
-  const res = await fetch(`${EXTENDED_API}${endpoint}`, {
-    headers: {
-      'X-Api-Key': apiKey,
-      'User-Agent': 'PerpTracker/1.0',
-    },
-  });
-  if (res.status === 404) return null; // balance à 0 retourne 404
-  if (!res.ok) throw new Error(`Extended API ${res.status}`);
+  const res = await fetch(
+    `/api/extended?endpoint=${encodeURIComponent(endpoint)}`,
+    {
+      headers: {
+        'X-Api-Key': apiKey,
+      },
+    }
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Extended ${res.status}: ${text}`);
+  }
   const data = await res.json();
   if (data.status === 'ERROR') throw new Error(data.error?.message || 'Extended API error');
   return data.data;
