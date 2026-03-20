@@ -58,7 +58,7 @@ async function fetchHLData(address) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'clearinghouseState', user: address }),
-    }),
+    }),    
   ]);
 
   const [fills, funding, state] = await Promise.all([
@@ -67,6 +67,10 @@ async function fetchHLData(address) {
     stateRes.json(),
   ]);
 
+  // ✅ Log ici, après avoir reçu les données
+  console.log('Funding sample:', JSON.stringify((funding || []).slice(0, 2), null, 2));
+  console.log('Funding total count:', (funding || []).length);
+  
   return { fills: fills || [], funding: funding || [], state };
 }
 
