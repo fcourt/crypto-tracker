@@ -119,7 +119,7 @@ export function useLivePrices(intervalMs = 3000) {
     const market   = MARKETS.find(m => m.id === marketId);
     const platform = PLATFORMS.find(p => p.id === platformId);
     if (!market || !platform) return null;
-    if (platform.source === 'hl')  return parseFloat(namedMids?.[market.hlKey]) || null;
+    if (platform.source === 'hl')  return parseFloat(hlMids[market.hlKey]) || null;  // ✅ hlMids
     if (platform.source === 'ext') {
       if (!market.extKey) return null;
       return parseFloat(extMids[market.extKey]) || null;
