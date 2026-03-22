@@ -8,12 +8,12 @@ export const MARKETS = [
   { id: 'ETH',    label: 'ETH',           hlKey: 'ETH',        extKey: 'ETH-USD',       category: 'Crypto' },
   { id: 'SOL',    label: 'SOL',           hlKey: 'SOL',        extKey: 'SOL-USD',       category: 'Crypto' },
   // Indices
-  { id: 'SP500',  label: 'S&P 500',       hlKey: 'SP500',      extKey: 'SPX500m-USD',   category: 'Indices' },
-  { id: 'NASDAQ', label: 'Nasdaq',        hlKey: 'NDX',        extKey: 'TECH100m-USD',  category: 'Indices' },
+  { id: 'SP500',  label: 'S&P 500',       hlKey: 'xyz:SP500',      extKey: 'SPX500m-USD',   category: 'Indices' },
+  { id: 'NASDAQ', label: 'Nasdaq',        hlKey: 'xyz:XYZ100',        extKey: 'TECH100m-USD',  category: 'Indices' },
   // Commodités
-  { id: 'GOLD',   label: 'Gold',          hlKey: 'XAU',        extKey: 'XAU-USD',       category: 'Commodités' },
+  { id: 'GOLD',   label: 'Gold',          hlKey: 'xyz:GOLD',        extKey: 'XAU-USD',       category: 'Commodités' },
   { id: 'SILVER', label: 'Silver',        hlKey: 'XAG',        extKey: 'XAG-USD',       category: 'Commodités' },
-  { id: 'OIL',    label: 'WTI Oil',       hlKey: 'WTI',        extKey: 'WTI-USD',       category: 'Commodités' },
+  { id: 'OIL',    label: 'WTI Oil',       hlKey: 'xyz:CL',        extKey: 'WTI-USD',       category: 'Commodités' },
   { id: 'BRENT',  label: 'Brent',         hlKey: 'BRENT',      extKey: 'XBR-USD',       category: 'Commodités' },
   { id: 'COPPER', label: 'Copper',        hlKey: 'HG',         extKey: 'XCU-USD',       category: 'Commodités' },
   { id: 'PLAT',   label: 'Platinum',      hlKey: 'XPT',        extKey: 'XPT-USD',       category: 'Commodités' },
@@ -84,6 +84,7 @@ console.log('Commodity/equity keys found:', sp500Keys);
   console.log('TSLA:', namedMids['TSLA']);
 
   console.log('Named keys sample:', Object.keys(namedMids).slice(0, 50));
+  console.log('ALL HL KEYS:', JSON.stringify(Object.keys(namedMids).sort()));
 
   return namedMids;
 }
