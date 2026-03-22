@@ -4,36 +4,46 @@ const HL_API = 'https://api.hyperliquid.xyz/info';
 
 export const MARKETS = [
   // Crypto
-  { id: 'BTC',    label: 'BTC',           hlKey: 'BTC',        extKey: 'BTC-USD',       category: 'Crypto' },
-  { id: 'ETH',    label: 'ETH',           hlKey: 'ETH',        extKey: 'ETH-USD',       category: 'Crypto' },
-  { id: 'SOL',    label: 'SOL',           hlKey: 'SOL',        extKey: 'SOL-USD',       category: 'Crypto' },
+  { id: 'BTC',       label: 'BTC',           hlKey: 'BTC',             extKey: 'BTC-USD',        category: 'Crypto' },
+  { id: 'ETH',       label: 'ETH',           hlKey: 'ETH',             extKey: 'ETH-USD',        category: 'Crypto' },
+  { id: 'SOL',       label: 'SOL',           hlKey: 'SOL',             extKey: 'SOL-USD',        category: 'Crypto' },
   // Indices
-  { id: 'SP500',  label: 'S&P 500',       hlKey: 'xyz:SP500',      extKey: 'SPX500m-USD',   category: 'Indices' },
-  { id: 'NASDAQ', label: 'Nasdaq',        hlKey: 'xyz:XYZ100',        extKey: 'TECH100m-USD',  category: 'Indices' },
+  { id: 'SP500',     label: 'S&P 500',       hlKey: 'xyz:SP500',       extKey: 'SPX500m-USD',    category: 'Indices' },
+  { id: 'NASDAQ',    label: 'Nasdaq',        hlKey: 'xyz:XYZ100',      extKey: 'TECH100m-USD',   category: 'Indices' },
+  { id: 'JP225',     label: 'Nikkei 225',    hlKey: 'xyz:JP225',       extKey: null,             category: 'Indices' },
+  { id: 'VIX',       label: 'VIX',           hlKey: 'xyz:VIX',         extKey: null,             category: 'Indices' },
+  { id: 'DXY',       label: 'DXY',           hlKey: 'xyz:DXY',         extKey: null,             category: 'Indices' },
   // Commodités
-  { id: 'GOLD',   label: 'Gold',          hlKey: 'xyz:GOLD',        extKey: 'XAU-USD',       category: 'Commodités' },
-  { id: 'SILVER', label: 'Silver',        hlKey: 'XAG',        extKey: 'XAG-USD',       category: 'Commodités' },
-  { id: 'OIL',    label: 'WTI Oil',       hlKey: 'xyz:CL',        extKey: 'WTI-USD',       category: 'Commodités' },
-  { id: 'BRENT',  label: 'Brent',         hlKey: 'BRENT',      extKey: 'XBR-USD',       category: 'Commodités' },
-  { id: 'COPPER', label: 'Copper',        hlKey: 'HG',         extKey: 'XCU-USD',       category: 'Commodités' },
-  { id: 'PLAT',   label: 'Platinum',      hlKey: 'XPT',        extKey: 'XPT-USD',       category: 'Commodités' },
-  { id: 'NGAS',   label: 'Nat. Gas',      hlKey: 'NG',         extKey: 'XNG-USD',       category: 'Commodités' },
+  { id: 'GOLD',      label: 'Gold',          hlKey: 'xyz:GOLD',        extKey: 'XAU-USD',        category: 'Commodités' },
+  { id: 'SILVER',    label: 'Silver',        hlKey: 'xyz:SILVER',      extKey: 'XAG-USD',        category: 'Commodités' },
+  { id: 'OIL',       label: 'WTI Oil',       hlKey: 'xyz:CL',          extKey: 'WTI-USD',        category: 'Commodités' },
+  { id: 'BRENT',     label: 'Brent',         hlKey: 'xyz:BRENTOIL',    extKey: 'XBR-USD',        category: 'Commodités' },
+  { id: 'COPPER',    label: 'Copper',        hlKey: 'xyz:COPPER',      extKey: 'XCU-USD',        category: 'Commodités' },
+  { id: 'PLAT',      label: 'Platinum',      hlKey: 'xyz:PLATINUM',    extKey: 'XPT-USD',        category: 'Commodités' },
+  { id: 'NGAS',      label: 'Nat. Gas',      hlKey: 'xyz:NATGAS',      extKey: 'XNG-USD',        category: 'Commodités' },
+  { id: 'PALLADIUM', label: 'Palladium',     hlKey: 'xyz:PALLADIUM',   extKey: null,             category: 'Commodités' },
+  { id: 'URANIUM',   label: 'Uranium',       hlKey: 'xyz:URANIUM',     extKey: null,             category: 'Commodités' },
   // Equities
-  { id: 'TSLA',   label: 'Tesla',         hlKey: 'TSLA',       extKey: 'TSLA_24_5-USD', category: 'Equities' },
-  { id: 'AAPL',   label: 'Apple',         hlKey: 'AAPL',       extKey: 'AAPL_24_5-USD', category: 'Equities' },
-  { id: 'NVDA',   label: 'Nvidia',        hlKey: 'NVDA',       extKey: 'NVDA_24_5-USD', category: 'Equities' },
-  { id: 'MSFT',   label: 'Microsoft',     hlKey: 'MSFT',       extKey: 'MSFT_24_5-USD', category: 'Equities' },
-  { id: 'AMZN',   label: 'Amazon',        hlKey: 'AMZN',       extKey: 'AMZN_24_5-USD', category: 'Equities' },
-  { id: 'GOOGL',  label: 'Google',        hlKey: 'GOOGL',      extKey: 'GOOG_24_5-USD', category: 'Equities' },
-  { id: 'COIN',   label: 'Coinbase',      hlKey: 'COIN',       extKey: 'COIN_24_5-USD', category: 'Equities' },
-  { id: 'PLTR',   label: 'Palantir',      hlKey: 'PLTR',       extKey: 'PLTR_24_5-USD', category: 'Equities' },
-  { id: 'MSTR',   label: 'MicroStrategy', hlKey: 'MSTR',       extKey: 'MSTR_24_5-USD', category: 'Equities' },
-  { id: 'AMD',    label: 'AMD',           hlKey: 'AMD',        extKey: 'AMD_24_5-USD',  category: 'Equities' },
-  { id: 'INTC',   label: 'Intel',         hlKey: 'INTC',       extKey: 'INTC_24_5-USD', category: 'Equities' },
-  { id: 'MU',     label: 'Micron',        hlKey: 'MU',         extKey: 'MU_24_5-USD',   category: 'Equities' },
-  { id: 'HOOD',   label: 'Robinhood',     hlKey: 'HOOD',       extKey: 'HOOD_24_5-USD', category: 'Equities' },
-  { id: 'CRCL',   label: 'Circle',        hlKey: 'CRCL',       extKey: 'CRCL_24_5-USD', category: 'Equities' },
-  { id: 'SNDK',   label: 'SanDisk',       hlKey: 'SNDK',       extKey: 'SNDK_24_5-USD', category: 'Equities' },
+  { id: 'TSLA',      label: 'Tesla',         hlKey: 'xyz:TSLA',        extKey: 'TSLA_24_5-USD',  category: 'Equities' },
+  { id: 'AAPL',      label: 'Apple',         hlKey: 'xyz:AAPL',        extKey: 'AAPL_24_5-USD',  category: 'Equities' },
+  { id: 'NVDA',      label: 'Nvidia',        hlKey: 'xyz:NVDA',        extKey: 'NVDA_24_5-USD',  category: 'Equities' },
+  { id: 'MSFT',      label: 'Microsoft',     hlKey: 'xyz:MSFT',        extKey: 'MSFT_24_5-USD',  category: 'Equities' },
+  { id: 'AMZN',      label: 'Amazon',        hlKey: 'xyz:AMZN',        extKey: 'AMZN_24_5-USD',  category: 'Equities' },
+  { id: 'GOOGL',     label: 'Google',        hlKey: 'xyz:GOOGL',       extKey: 'GOOG_24_5-USD',  category: 'Equities' },
+  { id: 'META',      label: 'Meta',          hlKey: 'xyz:META',        extKey: null,             category: 'Equities' },
+  { id: 'COIN',      label: 'Coinbase',      hlKey: 'xyz:COIN',        extKey: 'COIN_24_5-USD',  category: 'Equities' },
+  { id: 'PLTR',      label: 'Palantir',      hlKey: 'xyz:PLTR',        extKey: 'PLTR_24_5-USD',  category: 'Equities' },
+  { id: 'MSTR',      label: 'MicroStrategy', hlKey: 'xyz:MSTR',        extKey: 'MSTR_24_5-USD',  category: 'Equities' },
+  { id: 'AMD',       label: 'AMD',           hlKey: 'xyz:AMD',         extKey: 'AMD_24_5-USD',   category: 'Equities' },
+  { id: 'INTC',      label: 'Intel',         hlKey: 'xyz:INTC',        extKey: 'INTC_24_5-USD',  category: 'Equities' },
+  { id: 'MU',        label: 'Micron',        hlKey: 'xyz:MU',          extKey: 'MU_24_5-USD',    category: 'Equities' },
+  { id: 'HOOD',      label: 'Robinhood',     hlKey: 'xyz:HOOD',        extKey: 'HOOD_24_5-USD',  category: 'Equities' },
+  { id: 'CRCL',      label: 'Circle',        hlKey: 'xyz:CRCL',        extKey: 'CRCL_24_5-USD',  category: 'Equities' },
+  { id: 'SNDK',      label: 'SanDisk',       hlKey: 'xyz:SNDK',        extKey: 'SNDK_24_5-USD',  category: 'Equities' },
+  { id: 'NFLX',      label: 'Netflix',       hlKey: 'xyz:NFLX',        extKey: null,             category: 'Equities' },
+  { id: 'ORCL',      label: 'Oracle',        hlKey: 'xyz:ORCL',        extKey: null,             category: 'Equities' },
+  { id: 'LLY',       label: 'Eli Lilly',     hlKey: 'xyz:LLY',         extKey: null,             category: 'Equities' },
+  { id: 'TSM',       label: 'TSMC',          hlKey: 'xyz:TSM',         extKey: null,             category: 'Equities' },
 ];
 
 export const PLATFORMS = [
@@ -66,14 +76,13 @@ async function fetchHLMids() {
   // Merge des deux : xyz: préfixe pour éviter les collisions
   const prices = { ...nativeMids };
   Object.entries(xyzMids || {}).forEach(([k, v]) => {
-    prices[`xyz:${k}`] = v;
+    prices[k] = v;  
   });
 
   console.log('XYZ KEYS:', Object.keys(prices).filter(k => k.startsWith('xyz:')));
 
   return prices;
 }
-
 
 async function fetchExtMids() {
   const res = await fetch(
