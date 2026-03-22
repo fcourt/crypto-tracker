@@ -44,11 +44,37 @@ export const PLATFORMS = [
 ];
 
 async function fetchHLMids() {
-  const res = await fetch(HL_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'allMids' }),
+  const [midsRes, metaRes] = await Promise.all([
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'allMids' }),
+    }),
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'meta' }),
+    }),
+  ]);
+
+  const mids = await midsRes.json();
+  const meta = await metaRes.json();
+
+  // Construire un map nom → prix en résolvant les indices @N
+  const namedMids = { ...mids };
+  (meta?.universe || []).forEach((asset, i) => {
+    const indexKey = `@${i}`;
+    if (mids[indexKey] !== undefined) {
+      namedMids[asset.name] = mids[indexKey];
+    }
   });
+
+  console.log('SP500:', namedMids['SP500']);
+  console.log('XAU:', namedMids['XAU']);
+  console.log('WTI:', namedMids['WTI'], namedMids['CL']);
+
+  return namedMids;
+}
 
   const data = await res.json();
   // ✅ Toutes les clés qui ne sont pas des cryptos classiques
