@@ -20,8 +20,9 @@ async function fetchExtFundingRate(market) {
   const res = await fetch(
     `/api/extended?endpoint=${encodeURIComponent(`/info/${market}/funding`)}`
   );
+  if (!res.ok) return 0;
   const data = await res.json();
-  return parseFloat(data?.data?.fundingRate || data?.fundingRate || 0);
+  return parseFloat(data?.data?.fundingRate || 0);
 }
 
 export function useFundingRates(marketId, platform1Id, platform2Id) {
