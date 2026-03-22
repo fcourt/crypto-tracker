@@ -5,12 +5,12 @@ const EXT_API = 'https://api.starknet.extended.exchange/api/v1';
 
 // Mapping marché → clés dans chaque API
 export const MARKETS = [
-  { id: 'BTC',    label: 'BTC',     hlKey: 'BTC',       extKey: 'BTC-USD' },
-  { id: 'ETH',    label: 'ETH',     hlKey: 'ETH',       extKey: 'ETH-USD' },
-  { id: 'SOL',    label: 'SOL',     hlKey: 'SOL',       extKey: 'SOL-USD' },
-  { id: 'SP500',  label: 'S&P 500', hlKey: 'SP500',     extKey: 'SPX500m-USD' },
-  { id: 'GOLD',   label: 'Gold',    hlKey: 'XAU',       extKey: 'XAU-USD' },
-  { id: 'NASDAQ', label: 'Nasdaq',  hlKey: 'NDX',       extKey: 'NDX100m-USD' },
+  { id: 'BTC',    label: 'BTC',     hlKey: 'BTC',      extKey: 'BTC-USD' },
+  { id: 'ETH',    label: 'ETH',     hlKey: 'ETH',      extKey: 'ETH-USD' },
+  { id: 'SOL',    label: 'SOL',     hlKey: 'SOL',      extKey: 'SOL-USD' },
+  { id: 'SP500',  label: 'S&P 500', hlKey: 'xyz:SP500', extKey: 'SPX500m-USD' },
+  { id: 'GOLD',   label: 'Gold',    hlKey: 'xyz:XAU',  extKey: 'XAU-USD' },
+  { id: 'NASDAQ', label: 'Nasdaq',  hlKey: 'xyz:NDX',  extKey: 'NDX100m-USD' },
 ];
 
 export const PLATFORMS = [
@@ -29,8 +29,8 @@ async function fetchHLMids() {
   const data = await res.json();
   console.log('HL mids sample:', Object.entries(data).slice(0, 3));
   console.log('BTC price:', data['BTC']);
-  console.log('SP500 price:', data['SP500']);
-  console.log('XAU price:', data['XAU']);
+  console.log('SP500 price:', data['xyz:SP500']);
+  console.log('XAU price:', data['xyz:XAU']);
   
   return data;
 }
