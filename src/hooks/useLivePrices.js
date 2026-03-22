@@ -27,10 +27,10 @@ async function fetchHLMids() {
     body: JSON.stringify({ type: 'allMids' }),
   });
   const data = await res.json();
-  console.log('HL mids sample:', Object.entries(data).slice(0, 3));
-  console.log('BTC price:', data['BTC']);
-  console.log('SP500 price:', data['xyz:SP500']);
-  console.log('XAU price:', data['xyz:XAU']);
+ // console.log('HL mids sample:', Object.entries(data).slice(0, 3));
+ // console.log('BTC price:', data['BTC']);
+ // console.log('SP500 price:', data['xyz:SP500']);
+ // console.log('XAU price:', data['xyz:XAU']);
   
   return data;
 }
@@ -49,11 +49,10 @@ async function fetchExtMids() {
     `/api/extended?endpoint=${encodeURIComponent('/info/markets')}`
   );
   const data = await res.json();
-  console.log('Extended markets raw:', JSON.stringify(data).slice(0, 500));
   const map = {};
-  (data.data || data || []).forEach(m => {
-    const key = m.market || m.symbol || m.name;
-    const price = parseFloat(m.markPrice || m.lastPrice || m.indexPrice || 0);
+  (data.data || []).forEach(m => {
+    const key   = m.name;                                          // ← "BTC-USD"
+    const price = parseFloat(m.marketStats?.lastPrice || 0);      // ← marketStats.lastPrice
     if (key && price) map[key] = price;
   });
   console.log('Extended mids map:', map);
