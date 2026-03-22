@@ -170,10 +170,18 @@ export default function DeltaNeutralPage() {
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Marché</label>
             <select
-              value={marketId}
-              onChange={e => setMarketId(e.target.value)}
-              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-            >
+  value={marketId}
+  onChange={e => setMarketId(e.target.value)}
+  className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+>
+  {['Crypto', 'Indices', 'Commodités', 'Equities'].map(cat => (
+    <optgroup key={cat} label={cat}>
+      {MARKETS.filter(m => m.category === cat).map(m => (
+        <option key={m.id} value={m.id}>{m.label}</option>
+      ))}
+    </optgroup>
+  ))}
+</select>
               {MARKETS.map(m => (
                 <option key={m.id} value={m.id}>{m.label}</option>
               ))}
