@@ -4,27 +4,36 @@ const HL_API = 'https://api.hyperliquid.xyz/info';
 
 export const MARKETS = [
   // Crypto
-  { id: 'BTC',     label: 'BTC',         hlKey: 'BTC',          extKey: 'BTC-USD',      category: 'Crypto' },
-  { id: 'ETH',     label: 'ETH',         hlKey: 'ETH',          extKey: 'ETH-USD',      category: 'Crypto' },
-  { id: 'SOL',     label: 'SOL',         hlKey: 'SOL',          extKey: 'SOL-USD',      category: 'Crypto' },
+  { id: 'BTC',    label: 'BTC',         hlKey: 'BTC',        extKey: 'BTC-USD',       category: 'Crypto' },
+  { id: 'ETH',    label: 'ETH',         hlKey: 'ETH',        extKey: 'ETH-USD',       category: 'Crypto' },
+  { id: 'SOL',    label: 'SOL',         hlKey: 'SOL',        extKey: 'SOL-USD',       category: 'Crypto' },
   // Indices
-  { id: 'SP500',   label: 'S&P 500',     hlKey: 'xyz:SP500',    extKey: 'SPX500m-USD',  category: 'Indices' },
-  { id: 'NASDAQ',  label: 'Nasdaq',      hlKey: 'xyz:NDX',      extKey: 'NDX100m-USD',  category: 'Indices' },
-  { id: 'DOW',     label: 'Dow Jones',   hlKey: 'xyz:DJI',      extKey: null,           category: 'Indices' },
-  // Métaux
-  { id: 'GOLD',    label: 'Gold',        hlKey: 'xyz:XAU',      extKey: 'XAU-USD',      category: 'Commodités' },
-  { id: 'SILVER',  label: 'Silver',      hlKey: 'xyz:XAG',      extKey: 'XAG-USD',      category: 'Commodités' },
-  // Énergie
-  { id: 'OIL',     label: 'Crude Oil',   hlKey: 'xyz:WTI',      extKey: 'WTI-USD',      category: 'Commodités' },
-  { id: 'BRENT',   label: 'Brent',       hlKey: 'xyz:BRENT',    extKey: 'BRENT-USD',    category: 'Commodités' },
-  // Equities (trade.xyz uniquement)
-  { id: 'TSLA',    label: 'Tesla',       hlKey: 'xyz:TSLA',     extKey: null,           category: 'Equities' },
-  { id: 'AAPL',    label: 'Apple',       hlKey: 'xyz:AAPL',     extKey: null,           category: 'Equities' },
-  { id: 'NVDA',    label: 'Nvidia',      hlKey: 'xyz:NVDA',     extKey: null,           category: 'Equities' },
-  { id: 'MSFT',    label: 'Microsoft',   hlKey: 'xyz:MSFT',     extKey: null,           category: 'Equities' },
-  { id: 'AMZN',    label: 'Amazon',      hlKey: 'xyz:AMZN',     extKey: null,           category: 'Equities' },
-  { id: 'GOOGL',   label: 'Google',      hlKey: 'xyz:GOOGL',    extKey: null,           category: 'Equities' },
-  { id: 'META',    label: 'Meta',        hlKey: 'xyz:META',     extKey: null,           category: 'Equities' },
+  { id: 'SP500',  label: 'S&P 500',     hlKey: 'xyz:SP500',  extKey: 'SPX500m-USD',   category: 'Indices' },
+  { id: 'NASDAQ', label: 'Nasdaq',      hlKey: 'xyz:NDX',    extKey: 'TECH100m-USD',  category: 'Indices' },
+  // Métaux & Commodités
+  { id: 'GOLD',   label: 'Gold',        hlKey: 'xyz:XAU',    extKey: 'XAU-USD',       category: 'Commodités' },
+  { id: 'SILVER', label: 'Silver',      hlKey: 'xyz:XAG',    extKey: 'XAG-USD',       category: 'Commodités' },
+  { id: 'OIL',    label: 'WTI Oil',     hlKey: 'xyz:CL',     extKey: 'WTI-USD',       category: 'Commodités' },
+  { id: 'BRENT',  label: 'Brent',       hlKey: 'xyz:BRENT',  extKey: 'XBR-USD',       category: 'Commodités' },
+  { id: 'COPPER', label: 'Copper',      hlKey: 'xyz:HG',     extKey: 'XCU-USD',       category: 'Commodités' },
+  { id: 'PLAT',   label: 'Platinum',    hlKey: 'xyz:XPT',    extKey: 'XPT-USD',       category: 'Commodités' },
+  { id: 'NGAS',   label: 'Nat. Gas',    hlKey: 'xyz:NG',     extKey: 'XNG-USD',       category: 'Commodités' },
+  // Equities — disponibles sur les deux plateformes
+  { id: 'TSLA',   label: 'Tesla',       hlKey: 'xyz:TSLA',   extKey: 'TSLA_24_5-USD', category: 'Equities' },
+  { id: 'AAPL',   label: 'Apple',       hlKey: 'xyz:AAPL',   extKey: 'AAPL_24_5-USD', category: 'Equities' },
+  { id: 'NVDA',   label: 'Nvidia',      hlKey: 'xyz:NVDA',   extKey: 'NVDA_24_5-USD', category: 'Equities' },
+  { id: 'MSFT',   label: 'Microsoft',   hlKey: 'xyz:MSFT',   extKey: 'MSFT_24_5-USD', category: 'Equities' },
+  { id: 'AMZN',   label: 'Amazon',      hlKey: 'xyz:AMZN',   extKey: 'AMZN_24_5-USD', category: 'Equities' },
+  { id: 'GOOGL',  label: 'Google',      hlKey: 'xyz:GOOGL',  extKey: 'GOOG_24_5-USD', category: 'Equities' },
+  { id: 'COIN',   label: 'Coinbase',    hlKey: 'xyz:COIN',   extKey: 'COIN_24_5-USD', category: 'Equities' },
+  { id: 'PLTR',   label: 'Palantir',    hlKey: 'xyz:PLTR',   extKey: 'PLTR_24_5-USD', category: 'Equities' },
+  { id: 'MSTR',   label: 'MicroStrategy', hlKey: 'xyz:MSTR', extKey: 'MSTR_24_5-USD', category: 'Equities' },
+  { id: 'AMD',    label: 'AMD',         hlKey: 'xyz:AMD',    extKey: 'AMD_24_5-USD',  category: 'Equities' },
+  { id: 'INTC',   label: 'Intel',       hlKey: 'xyz:INTC',   extKey: 'INTC_24_5-USD', category: 'Equities' },
+  { id: 'MU',     label: 'Micron',      hlKey: 'xyz:MU',     extKey: 'MU_24_5-USD',   category: 'Equities' },
+  { id: 'HOOD',   label: 'Robinhood',   hlKey: 'xyz:HOOD',   extKey: 'HOOD_24_5-USD', category: 'Equities' },
+  { id: 'CRCL',   label: 'Circle',      hlKey: 'xyz:CRCL',   extKey: 'CRCL_24_5-USD', category: 'Equities' },
+  { id: 'AMD2',   label: 'SanDisk',     hlKey: 'xyz:SNDK',   extKey: 'SNDK_24_5-USD', category: 'Equities' },
 ];
 
 export const PLATFORMS = [
@@ -40,7 +49,10 @@ async function fetchHLMids() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'allMids' }),
   });
-  return res.json();
+
+  const data = await res.json(); // ✅ parser d'abord
+  console.log('HL xyz:', Object.keys(data).filter(k => k.startsWith('xyz:')));
+  return data; // ✅ retourner data, pas res.json() une deuxième fois  
 }
 
 async function fetchExtMids() {
@@ -54,10 +66,6 @@ async function fetchExtMids() {
     const price = parseFloat(m.marketStats?.lastPrice || 0);
     if (key && price) map[key] = price;
   });
-  
-  // ✅ Log tous les marchés Extended disponibles
-  console.log('Extended all markets:', Object.keys(map).sort());
-  
   return map;
 }
 
@@ -90,7 +98,7 @@ export function useLivePrices(intervalMs = 3000) {
     if (!market || !platform) return null;
     if (platform.source === 'hl')  return parseFloat(hlMids[market.hlKey])  || null;
     if (platform.source === 'ext') {
-      if (!market.extKey) return null; // marché non dispo sur Extended
+      if (!market.extKey) return null;
       return parseFloat(extMids[market.extKey]) || null;
     }
     return null;
