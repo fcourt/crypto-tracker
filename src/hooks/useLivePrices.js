@@ -70,10 +70,20 @@ async function fetchHLMids() {
   });
 
   // Log temporaire — à supprimer après confirmation
-  console.log('SP500:', namedMids['SP500']);
+  const sp500Keys = Object.keys(namedMids).filter(k =>
+  k.toLowerCase().includes('sp') ||
+  k.toLowerCase().includes('500') ||
+  k.toLowerCase().includes('xau') ||
+  k.toLowerCase().includes('wti') ||
+  k.toLowerCase().includes('tsla')
+);
+  
+console.log('Commodity/equity keys found:', sp500Keys);
   console.log('XAU:', namedMids['XAU']);
   console.log('WTI:', namedMids['WTI']);
   console.log('TSLA:', namedMids['TSLA']);
+
+  console.log('Named keys sample:', Object.keys(namedMids).slice(0, 50));
 
   return namedMids;
 }
