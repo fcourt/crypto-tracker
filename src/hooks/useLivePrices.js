@@ -44,50 +44,29 @@ export const PLATFORMS = [
 ];
 
 async function fetchHLMids() {
-  const [midsRes, metaRes] = await Promise.all([
-    fetch(HL_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'allMids' }),
-    }),
-    fetch(HL_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'meta' }),
-    }),
-  ]);
+  const res = await fetch(HL_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+  });
+  const [meta, ctxs] = await res.json();
 
-  const mids = await midsRes.json();
-  const meta = await metaRes.json();
-
-  // Résoudre les indices @N en noms lisibles
-  const namedMids = { ...mids };
-  (meta?.universe || []).forEach((asset, i) => {
-    const indexKey = `@${i}`;
-    if (mids[indexKey] !== undefined) {
-      namedMids[asset.name] = mids[indexKey];
+  const prices = {};
+  meta.universe.forEach((asset, i) => {
+    if (ctxs[i]?.markPx) {
+      prices[asset.name] = ctxs[i].markPx;
     }
   });
 
-  // Log temporaire — à supprimer après confirmation
-  const sp500Keys = Object.keys(namedMids).filter(k =>
-  k.toLowerCase().includes('sp') ||
-  k.toLowerCase().includes('500') ||
-  k.toLowerCase().includes('xau') ||
-  k.toLowerCase().includes('wti') ||
-  k.toLowerCase().includes('tsla')
-);
-  
-console.log('Commodity/equity keys found:', sp500Keys);
-  console.log('XAU:', namedMids['XAU']);
-  console.log('WTI:', namedMids['WTI']);
-  console.log('TSLA:', namedMids['TSLA']);
+  console.log('SAMPLE KEYS:', Object.keys(prices).filter(k =>
+    ['AAPL','TSLA','NVDA','GOLD','SP500','CL','XAG'].some(t => k.includes(t))
+  ));
 
-  console.log('Named keys sample:', Object.keys(namedMids).slice(0, 50));
-  console.log('ALL HL KEYS:', JSON.stringify(Object.keys(namedMids).sort()));
+  console.log('ALL KEYS:', JSON.stringify(Object.keys(prices).sort()));
 
-  return namedMids;
+  return prices;
 }
+
 
 async function fetchExtMids() {
   const res = await fetch(
