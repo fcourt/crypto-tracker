@@ -79,7 +79,7 @@ async function fetchHLMids() {
     prices[k] = v;  
   });
 
-  console.log('XYZ KEYS:', Object.keys(prices).filter(k => k.startsWith('xyz:')));
+  //console.log('XYZ KEYS:', Object.keys(prices).filter(k => k.startsWith('xyz:')));
 
   return prices;
 }
