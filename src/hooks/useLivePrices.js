@@ -26,17 +26,36 @@ async function fetchHLMids() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type: 'allMids' }),
   });
-  return res.json();
+  const data = await res.json();
+  console.log('HL mids sample:', Object.entries(data).slice(0, 3));
+  return data;
 }
+
+//async function fetchHLMids() {
+//  const res = await fetch(HL_API, {
+//    method: 'POST',
+//    headers: { 'Content-Type': 'application/json' },
+//    body: JSON.stringify({ type: 'allMids' }),
+//  });
+//  return res.json();
+//}
 
 async function fetchExtMids() {
   const res = await fetch(`${EXT_API}/info/markets`);
   const data = await res.json();
+
+  //log a supprimer
+  console.log('Extended markets raw:', JSON.stringify(data).slice(0, 500));
+  
   // Transformer en map { 'BTC-USD': price, ... }
   const map = {};
   (data.data || data || []).forEach(m => {
     map[m.market || m.symbol] = parseFloat(m.markPrice || m.lastPrice || 0);
   });
+
+  //log a supprimer
+  console.log('Extended mids map:', map);
+  
   return map;
 }
 
