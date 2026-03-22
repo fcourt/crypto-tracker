@@ -1,4 +1,3 @@
-//DeltaNeutralPage.jsx
 import { useState, useMemo } from 'react';
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
@@ -12,7 +11,7 @@ function PriceDot({ fresh }) {
   );
 }
 
-function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, marginRequired, fundingRate, suggestion }) {
+function LegCard({ side, platform, price, leverage, sizeUSD, sizeAsset, marginRequired, fundingRate, suggestion }) {
   const isSuggested = suggestion === side;
   return (
     <div className={`rounded-xl border p-4 flex flex-col gap-3 ${
@@ -20,7 +19,6 @@ function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, 
         ? 'border-green-700 bg-green-900/20'
         : 'border-red-700 bg-red-900/20'
     }`}>
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -35,7 +33,6 @@ function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, 
         )}
       </div>
 
-      {/* Prix live */}
       <div className="bg-gray-900 rounded-lg px-3 py-2">
         <p className="text-gray-500 text-xs mb-0.5">Prix live</p>
         <p className="text-white font-bold text-lg">
@@ -43,7 +40,6 @@ function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, 
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Size (asset)</p>
@@ -74,7 +70,6 @@ function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, 
         </div>
       </div>
 
-      {/* Copier size */}
       {sizeAsset && (
         <button
           onClick={() => navigator.clipboard.writeText(sizeAsset.toFixed(6))}
@@ -88,54 +83,38 @@ function LegCard({ side, platform, market, price, leverage, sizeUSD, sizeAsset, 
 }
 
 export default function DeltaNeutralPage() {
-  const [marketId,   setMarketId]   = useState('BTC');
-  const [platform1,  setPlatform1]  = useState('hyperliquid');
-  const [platform2,  setPlatform2]  = useState('extended');
-  const [sizeMode,   setSizeMode]   = useState('usd');   // 'usd' | 'asset'
-  const [sizeValue,  setSizeValue]  = useState('');
-  const [leverage1,  setLeverage1]  = useState(5);
-  const [leverage2,  setLeverage2]  = useState(5);
-  const [dirP1,      setDirP1]      = useState('LONG');  // direction plateforme 1
+  const [marketId,  setMarketId]  = useState('BTC');
+  const [platform1, setPlatform1] = useState('hyperliquid');
+  const [platform2, setPlatform2] = useState('extended');
+  const [sizeMode,  setSizeMode]  = useState('usd');
+  const [sizeValue, setSizeValue] = useState('');
+  const [leverage1, setLeverage1] = useState(5);
+  const [leverage2, setLeverage2] = useState(5);
+  const [dirP1,     setDirP1]     = useState('LONG');
 
   const { getPrice, lastUpdate } = useLivePrices(3000);
   const fundingRates = useFundingRates(marketId, platform1, platform2);
 
   const price1 = getPrice(marketId, platform1);
   const price2 = getPrice(marketId, platform2);
+  const plat1  = PLATFORMS.find(p => p.id === platform1);
+  const plat2  = PLATFORMS.find(p => p.id === platform2);
+  const dirP2  = dirP1 === 'LONG' ? 'SHORT' : 'LONG';
 
-  const plat1 = PLATFORMS.find(p => p.id === platform1);
-  const plat2 = PLATFORMS.find(p => p.id === platform2);
-
-  // Direction opposée pour la plateforme 2
-  const dirP2 = dirP1 === 'LONG' ? 'SHORT' : 'LONG';
-
-  // Suggestion auto : long là où le funding est le plus négatif (on reçoit du funding)
   const suggestion = useMemo(() => {
     const r1 = fundingRates.p1;
     const r2 = fundingRates.p2;
     if (r1 == null || r2 == null) return null;
-    // Long = on paie si funding > 0, on reçoit si funding < 0
-    // On veut être long là où funding < 0 (on reçoit)
     return r1 <= r2 ? 'LONG_P1' : 'LONG_P2';
   }, [fundingRates]);
 
-  // Calcul des sizes
   const { sizeUSD, sizeAsset1, sizeAsset2, margin1, margin2, spreadPct } = useMemo(() => {
     const val = parseFloat(sizeValue);
     if (!val || val <= 0 || !price1 || !price2) return {};
-
-    let usd;
-    if (sizeMode === 'usd') {
-      usd = val;
-    } else {
-      // asset → convertir en USD avec prix moyen
-      usd = val * ((price1 + price2) / 2);
-    }
-
+    const usd    = sizeMode === 'usd' ? val : val * ((price1 + price2) / 2);
     const asset1 = usd / price1;
     const asset2 = usd / price2;
     const spread = ((price1 - price2) / price2) * 100;
-
     return {
       sizeUSD:    usd,
       sizeAsset1: asset1,
@@ -167,26 +146,26 @@ export default function DeltaNeutralPage() {
 
         {/* Ligne 1 : Marché + Plateformes */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+          {/* Marché */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Marché</label>
             <select
-  value={marketId}
-  onChange={e => setMarketId(e.target.value)}
-  className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
->
-  {['Crypto', 'Indices', 'Commodités', 'Equities'].map(cat => (
-    <optgroup key={cat} label={cat}>
-      {MARKETS.filter(m => m.category === cat).map(m => (
-        <option key={m.id} value={m.id}>{m.label}</option>
-      ))}
-    </optgroup>
-  ))}
-</select>
-              {MARKETS.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
+              value={marketId}
+              onChange={e => setMarketId(e.target.value)}
+              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+            >
+              {['Crypto', 'Indices', 'Commodités', 'Equities'].map(cat => (
+                <optgroup key={cat} label={cat}>
+                  {MARKETS.filter(m => m.category === cat).map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </div>
+
+          {/* Plateforme 1 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 1</label>
             <select
@@ -199,6 +178,8 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
+
+          {/* Plateforme 2 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 2</label>
             <select
@@ -215,6 +196,8 @@ export default function DeltaNeutralPage() {
 
         {/* Ligne 2 : Size + Leviers + Direction */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+          {/* Size */}
           <div className="flex flex-col gap-1 col-span-2 md:col-span-1">
             <label className="text-xs text-gray-500">Size</label>
             <div className="flex gap-1">
@@ -248,6 +231,7 @@ export default function DeltaNeutralPage() {
             />
           </div>
 
+          {/* Levier P1 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Levier P1</label>
             <input
@@ -259,6 +243,7 @@ export default function DeltaNeutralPage() {
             />
           </div>
 
+          {/* Levier P2 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Levier P2</label>
             <input
@@ -270,6 +255,7 @@ export default function DeltaNeutralPage() {
             />
           </div>
 
+          {/* Direction P1 */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Direction P1</label>
             <div className="flex gap-1">
@@ -298,7 +284,7 @@ export default function DeltaNeutralPage() {
           </div>
         </div>
 
-        {/* Spread de prix */}
+        {/* Spread */}
         {spreadPct != null && (
           <div className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between ${
             Math.abs(spreadPct) > 0.1
@@ -314,7 +300,7 @@ export default function DeltaNeutralPage() {
           </div>
         )}
 
-        {/* Marge totale requise */}
+        {/* Marge totale */}
         {margin1 && margin2 && (
           <div className="rounded-lg px-3 py-2 bg-blue-900/20 border border-blue-700 text-xs flex items-center justify-between">
             <span className="text-gray-400">Marge totale requise</span>
@@ -328,7 +314,6 @@ export default function DeltaNeutralPage() {
         <LegCard
           side={dirP1}
           platform={plat1}
-          market={marketId}
           price={price1}
           leverage={leverage1}
           sizeUSD={sizeUSD}
@@ -340,7 +325,6 @@ export default function DeltaNeutralPage() {
         <LegCard
           side={dirP2}
           platform={plat2}
-          market={marketId}
           price={price2}
           leverage={leverage2}
           sizeUSD={sizeUSD}
