@@ -18,7 +18,7 @@ async function fetchHLFundingRates() {
 
 async function fetchExtFundingRate(market) {
   const res = await fetch(
-    `https://api.starknet.extended.exchange/api/v1/info/${market}/funding`
+    `/api/extended?endpoint=${encodeURIComponent(`/info/${market}/funding`)}`
   );
   const data = await res.json();
   return parseFloat(data?.data?.fundingRate || data?.fundingRate || 0);
