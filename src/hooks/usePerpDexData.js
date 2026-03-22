@@ -66,6 +66,10 @@ async function fetchHLData(address) {
     fundingRes.json(),
     stateRes.json(),
   ]);
+
+  const { fills } = await fetchHLData(address);
+  const xyzFills = fills.filter(f => f.coin?.startsWith('xyz:'));
+  console.log('XYZ coins:', [...new Set(xyzFills.map(f => f.coin))]);
   
   return { fills: fills || [], funding: funding || [], state };
 }
