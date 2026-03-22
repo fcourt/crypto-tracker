@@ -44,25 +44,32 @@ export const PLATFORMS = [
 ];
 
 async function fetchHLMids() {
-  const res = await fetch(HL_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+  // Un appel pour les perps natifs HL (crypto), un pour les marchés XYZ (equities/commodités)
+  const [resNative, resXyz] = await Promise.all([
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'allMids' }),           // dex: "" par défaut = crypto natif
+    }),
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'allMids', dex: 'xyz' }), // marchés HIP-3 trade.xyz
+    }),
+  ]);
+
+  const [nativeMids, xyzMids] = await Promise.all([
+    resNative.json(),
+    resXyz.json(),
+  ]);
+
+  // Merge des deux : xyz: préfixe pour éviter les collisions
+  const prices = { ...nativeMids };
+  Object.entries(xyzMids || {}).forEach(([k, v]) => {
+    prices[`xyz:${k}`] = v;
   });
-  const [meta, ctxs] = await res.json();
 
-  const prices = {};
-  meta.universe.forEach((asset, i) => {
-    if (ctxs[i]?.markPx) {
-      prices[asset.name] = ctxs[i].markPx;
-    }
-  });
-
-  console.log('SAMPLE KEYS:', Object.keys(prices).filter(k =>
-    ['AAPL','TSLA','NVDA','GOLD','SP500','CL','XAG'].some(t => k.includes(t))
-  ));
-
-  console.log('ALL KEYS:', JSON.stringify(Object.keys(prices).sort()));
+  console.log('XYZ KEYS:', Object.keys(prices).filter(k => k.startsWith('xyz:')));
 
   return prices;
 }
