@@ -25,8 +25,6 @@ function safeFloat(val) {
   return isNaN(n) ? 0 : n;
 }
 
-// Filtre un tableau d'items par plage de dates
-// dateField : nom du champ timestamp (en ms ou en secondes)
 export function filterByDate(items, dateField, dateRange) {
   if (!dateRange?.from || !Array.isArray(items)) return items;
   return items.filter(item => {
@@ -50,7 +48,7 @@ async function fetchHLData(address) {
       body: JSON.stringify({
         type: 'userFunding',
         user: address,
-        startTime: Date.now() - 30 * 86400000,
+        startTime: Date.now() - 90 * 86400000,
         endTime: Date.now(),
       }),
     }),
@@ -58,7 +56,7 @@ async function fetchHLData(address) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'clearinghouseState', user: address }),
-    }),    
+    }),
   ]);
 
   const [fills, funding, state] = await Promise.all([
@@ -67,10 +65,10 @@ async function fetchHLData(address) {
     stateRes.json(),
   ]);
 
-  const { fills } = await fetchHLData(address);
-  const xyzFills = fills.filter(f => f.coin?.startsWith('xyz:'));
+  // ✅ Log ici, après avoir les données, sans redéclarer fills
+  const xyzFills = (fills || []).filter(f => f.coin?.startsWith('xyz:'));
   console.log('XYZ coins:', [...new Set(xyzFills.map(f => f.coin))]);
-  
+
   return { fills: fills || [], funding: funding || [], state };
 }
 
@@ -92,7 +90,6 @@ export async function fetchPerpDexData(address, selectedProtocols, dateRange) {
 
   const { fills, funding, state } = await fetchHLData(address);
 
-  // Filtrage par période sur le champ 'time' (ms dans l'API HL)
   const filteredFills   = filterByDate(fills,   'time', dateRange);
   const filteredFunding = filterByDate(funding, 'time', dateRange);
 
