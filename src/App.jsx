@@ -7,6 +7,7 @@ import TradeTable from './components/TradeTable';
 import MegaEthTab from './components/MegaEthTab';
 import FundingPanel from './components/FundingPanel';
 import PerpDexPage from './pages/PerpDexPage';
+import DeltaNeutralPage from './pages/DeltaNeutralPage';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
 
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'hyperliquid', label: '⚡ Hyperliquid' },
   { id: 'megaeth',     label: '🔷 MegaETH' },
   { id: 'perpdex',     label: '📊 PerpDex' },
+  { id: 'deltaneutral', label: '⚖️ Delta Neutral' }, 
 ];
 
 export default function App() {
@@ -121,6 +123,13 @@ export default function App() {
           <PerpDexPage />
         </div>
       )}
+
+      {/*Onglet Position Deltra Neutral*/}
+      {activeTab === 'deltaneutral' && (
+      <div className="pt-4">
+        <DeltaNeutralPage />
+      </div>
+    )}
 
     </div>
   );
