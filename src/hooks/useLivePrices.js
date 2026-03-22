@@ -50,8 +50,16 @@ async function fetchHLMids() {
     body: JSON.stringify({ type: 'allMids' }),
   });
 
-  const data = await res.json(); // ✅ parser d'abord
-  console.log('HL xyz:', Object.keys(data).filter(k => k.startsWith('xyz:')));
+  const data = await res.json();
+  // ✅ Toutes les clés qui ne sont pas des cryptos classiques
+  const nonCrypto = Object.keys(data).filter(k =>
+    !k.match(/^[A-Z0-9]{2,6}$/) || k.includes(':')
+  );
+  console.log('HL non-crypto keys:', nonCrypto);
+  console.log('HL SP500:', data['SP500'], data['@SP500'], data['xyz:SP500']);
+  console.log('HL XAU:', data['XAU'], data['@XAU'], data['xyz:XAU']);
+  console.log('HL CL:', data['CL'], data['@CL'], data['WTI']);
+  
   return data; // ✅ retourner data, pas res.json() une deuxième fois  
 }
 
