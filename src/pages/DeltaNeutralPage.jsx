@@ -3,6 +3,7 @@ import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
+import { useHLMeta } from '../hooks/useHLMeta';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -634,6 +635,8 @@ export default function DeltaNeutralPage() {
   const [sizeUSD,     setSizeUSD]     = useState('');
   const [useStepSize, setUseStepSize] = useState(false);
   const [fees,        setFees]        = useState(loadFees);
+  
+  const { getAssetMeta } = useHLMeta();
 
   const [hlAddress, setHlAddress] = useState(
     () => localStorage.getItem('hl_address') || ''
@@ -673,19 +676,25 @@ const canTradePlatform = (platformId) => {
   return canTradeHL;
 };
 
-const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => ({
-  platformId,
-  hlKey:      market?.hlKey,
-  extKey:     market?.extKey,
-  assetIndex: market?.assetIndex ?? 0,
-  isBuy:      side === 'LONG',
-  size:       useStepSize && getStepSize(marketId)
-    ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
-    : sizeAsset,
-  limitPrice,
-  pxDecimals: market?.pxDecimals ?? 2,
-  szDecimals: market?.szDecimals ?? 6,
-});
+const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => {
+  // Résolution dynamique de l'index et des décimales
+  const hlKey    = market?.hlKey;
+  const meta     = getAssetMeta(hlKey);       // { index, szDecimals, pxDecimals }
+
+  return {
+    platformId,
+    hlKey,
+    extKey:      market?.extKey,
+    assetIndex:  meta?.index    ?? 0,         // ← résolu dynamiquement ✅
+    isBuy:       side === 'LONG',
+    size:        useStepSize && getStepSize(marketId)
+      ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
+      : sizeAsset,
+    limitPrice,
+    pxDecimals:  meta?.pxDecimals ?? 2,       // ← résolu dynamiquement ✅
+    szDecimals:  meta?.szDecimals ?? 6,       // ← résolu dynamiquement ✅
+  };
+};
 
 const handlePlaceLeg = async (legNum) => {
   const setter    = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
