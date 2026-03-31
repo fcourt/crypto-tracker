@@ -1,9 +1,6 @@
 // ─── Hyperliquid ─────────────────────────────────────────────────────────────
-import {
-  ExchangeClient,
-  HttpTransport,
-} from '@nktkas/hyperliquid';
-import { PrivateKeySigner } from '@nktkas/hyperliquid/signing';
+import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+import { privateKeyToAccount } from 'viem/accounts';
 
 // ─── Extended (Starknet) ─────────────────────────────────────────────────────
 import { ec } from 'starknet';
@@ -114,11 +111,11 @@ export function usePlaceOrder() {
     if (!canTradeHL) throw new Error('Clé privée agent HL manquante');
 
     // Le SDK gère toute la signature EIP-712 correctement [web:86]
-    const signer   = new PrivateKeySigner({ privateKey: agentPrivateKey });
-    const exchange = new ExchangeClient({
-      transport: new HttpTransport(),
-      wallet:    signer,
-    });
+    const wallet   = privateKeyToAccount(agentPrivateKey);
+const exchange = new ExchangeClient({
+  transport: new HttpTransport(),
+  wallet,
+});
 
     const result = await exchange.order({
       orders: [{
