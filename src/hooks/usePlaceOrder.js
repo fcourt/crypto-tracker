@@ -1,6 +1,6 @@
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ec, TypedData, stark } from 'starknet';
+import { ec, typedData, stark } from 'starknet';
 
 const EXT_API_BASE = '/api/extended';
 
@@ -55,10 +55,10 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   };
 
   // Hash SNIP-12 du message
-  const msgHash = TypedData.getMessageHash(
-    { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    stark.makeAddress(l2Vault.toString())
-  );
+  const msgHash = typedData.getMessageHash(
+  { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
+  stark.makeAddress(l2Vault.toString())
+);
 
   // Signature avec la clé privée Stark
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
