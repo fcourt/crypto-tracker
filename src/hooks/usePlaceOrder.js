@@ -4,7 +4,6 @@ import { ec, typedData, stark } from 'starknet';
 
 const EXT_API_BASE = '/api/extended';
 
-// ─── Domaine SNIP-12 Extended (Starknet Mainnet) ─────────────────────────────
 const STARKNET_DOMAIN = {
   name:     'Perpetuals',
   version:  'v0',
@@ -12,7 +11,6 @@ const STARKNET_DOMAIN = {
   revision: '1',
 };
 
-// ─── Types SNIP-12 pour un ordre Extended ────────────────────────────────────
 const ORDER_TYPES = {
   StarknetDomain: [
     { name: 'name',     type: 'shortstring' },
@@ -33,14 +31,12 @@ const ORDER_TYPES = {
   ],
 };
 
-// ─── Signature Extended (SNIP-12) ────────────────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce     = Date.now();
-  const expiresAt = Math.floor(nonce / 1000) + 3600; // +1h
-
-  const sizeStr  = order.size.toFixed(order.szDecimals ?? 6);
-  const priceStr = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  const side     = order.isBuy ? 'BUY' : 'SELL';
+  const expiresAt = Math.floor(nonce / 1000) + 3600;
+  const sizeStr   = order.size.toFixed(order.szDecimals ?? 6);
+  const priceStr  = order.limitPrice.toFixed(order.pxDecimals ?? 2);
+  const side      = order.isBuy ? 'BUY' : 'SELL';
 
   const message = {
     market:      order.extKey,
@@ -54,13 +50,11 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     l2Vault:     l2Vault.toString(),
   };
 
-  // Hash SNIP-12 du message
   const msgHash = typedData.getMessageHash(
-  { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-  stark.makeAddress(l2Vault.toString())
-);
+    { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
+    stark.makeAddress(l2Vault.toString())
+  );
 
-  // Signature avec la clé privée Stark
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
   const payload = {
@@ -79,40 +73,34 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     },
   };
 
-  const res = await fetch(
+  const res      = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/orders')}`,
     {
       method:  'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
-        'User-Agent':   'crypto-perp-tracker/1.0',
       },
       body: JSON.stringify(payload),
     }
   );
 
- // const data = await res.json().catch(() => ({}));
- // if (!res.ok || data?.status === 'ERROR') {
- //   throw new Error(data?.error?.message || data?.message || `Extended HTTP ${res.status}`);
- // }
- // return data;
+  const rawText = await res.text();
+  console.log('Extended raw response:', res.status, rawText);
 
-  const data = await res.json().catch(() => ({}));
+  let data = {};
+  try { data = JSON.parse(rawText); } catch { /* réponse non-JSON */ }
+
   if (!res.ok || data?.status === 'ERROR') {
-    // Log complet pour debug
-    console.error('Extended error response:', JSON.stringify(data, null, 2));
     throw new Error(
       data?.error?.message ||
       data?.message ||
-      data?.error ||
-      JSON.stringify(data) ||
+      rawText ||
       `Extended HTTP ${res.status}`
     );
   }
+  return data;
 }
-
-// ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
@@ -136,7 +124,6 @@ export function usePlaceOrder() {
       isBuy, size, limitPrice, pxDecimals, szDecimals,
     } = params;
 
-    // ── Extended ─────────────────────────────────────────────────────────────
     if (platformId === 'extended') {
       if (!canTradeExt) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
       return await placeExtendedOrder({
@@ -147,7 +134,6 @@ export function usePlaceOrder() {
       });
     }
 
-    // ── HL / trade.xyz / HyENA ────────────────────────────────────────────────
     if (!canTradeHL) throw new Error('Clé privée agent HL manquante');
 
     const wallet   = privateKeyToAccount(agentPrivateKey);
