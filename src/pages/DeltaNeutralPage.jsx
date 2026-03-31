@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
@@ -34,6 +34,70 @@ function loadFees() {
 
 function saveFees(fees) {
   localStorage.setItem(FEES_STORAGE_KEY, JSON.stringify(fees));
+}
+
+// ─── Fetchers positions ───────────────────────────────────────────────────────
+
+async function fetchHLPositions(address) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return [];
+  try {
+    const res   = await fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+    });
+    const state = await res.json();
+    return (state?.assetPositions || [])
+      .filter(p => parseFloat(p.position?.szi) !== 0)
+      .map(p => {
+        const coin     = p.position.coin;
+        const szi      = parseFloat(p.position.szi);
+        const platform = coin.startsWith('xyz:')  ? 'xyz'
+                       : coin.startsWith('hyna:') ? 'hyena'
+                       : 'hyperliquid';
+        const market   = MARKETS.find(m => m.hlKey === coin);
+        return {
+          platform,
+          coin,
+          marketId:      market?.id ?? null,
+          label:         market?.label ?? coin,
+          side:          szi > 0 ? 'LONG' : 'SHORT',
+          szi:           Math.abs(szi),
+          entryPx:       parseFloat(p.position.entryPx || 0),
+          unrealizedPnl: parseFloat(p.position.unrealizedPnl || 0),
+        };
+      });
+  } catch (e) {
+    console.warn('fetchHLPositions error:', e.message);
+    return [];
+  }
+}
+
+async function fetchExtPositions(apiKey) {
+  if (!apiKey?.trim()) return [];
+  try {
+    const res  = await fetch(
+      `/api/extended?endpoint=${encodeURIComponent('/user/positions')}`,
+      { headers: { 'X-Api-Key': apiKey } }
+    );
+    const data = await res.json();
+    return (data?.data || []).map(p => {
+      const market = MARKETS.find(m => m.extKey === p.market);
+      return {
+        platform:      'extended',
+        coin:          p.market,
+        marketId:      market?.id ?? null,
+        label:         market?.label ?? p.market,
+        side:          p.side,
+        szi:           parseFloat(p.size),
+        entryPx:       parseFloat(p.openPrice),
+        unrealizedPnl: parseFloat(p.unrealisedPnl ?? 0),
+      };
+    });
+  } catch (e) {
+    console.warn('fetchExtPositions error:', e.message);
+    return [];
+  }
 }
 
 // ─── Hooks locaux ─────────────────────────────────────────────────────────────
@@ -107,41 +171,18 @@ function useOrderBook(hlKey) {
   return book;
 }
 
-function useOpenPositions(address) {
+function useOpenPositions(address, extApiKey) {
   const [positions, setPositions] = useState([]);
   const [loading,   setLoading]   = useState(false);
 
   const load = async () => {
-    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
     setLoading(true);
     try {
-      const res   = await fetch(HL_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'clearinghouseState', user: address }),
-      });
-      const state = await res.json();
-      const parsed = (state?.assetPositions || [])
-        .filter(p => parseFloat(p.position?.szi) !== 0)
-        .map(p => {
-          const coin     = p.position.coin;
-          const szi      = parseFloat(p.position.szi);
-          const platform = coin.startsWith('xyz:')  ? 'xyz'
-                         : coin.startsWith('hyna:') ? 'hyena'
-                         : 'hyperliquid';
-          const market   = MARKETS.find(m => m.hlKey === coin);
-          return {
-            platform,
-            coin,
-            marketId:     market?.id ?? null,
-            label:        market?.label ?? coin,
-            side:         szi > 0 ? 'LONG' : 'SHORT',
-            szi:          Math.abs(szi),
-            entryPx:      parseFloat(p.position.entryPx || 0),
-            unrealizedPnl: parseFloat(p.position.unrealizedPnl || 0),
-          };
-        });
-      setPositions(parsed);
+      const [hlPos, extPos] = await Promise.all([
+        fetchHLPositions(address),
+        fetchExtPositions(extApiKey),
+      ]);
+      setPositions([...hlPos, ...extPos]);
     } catch (e) {
       console.warn('useOpenPositions error:', e.message);
     } finally {
@@ -260,22 +301,22 @@ function FeeConfigPanel({ fees, onChange }) {
   );
 }
 
-function PositionLoader({ address, onLoad, getPrice }) {
-  const { positions, loading, load } = useOpenPositions(address);
+function PositionLoader({ address, extApiKey, onLoad, getPrice }) {
+  const { positions, loading, load } = useOpenPositions(address, extApiKey);
   const [selected, setSelected] = useState('');
 
   const handleSelect = (e) => {
     const val = e.target.value;
     setSelected(val);
     if (!val) return;
-    const pos = positions.find((_, i) => String(i) === val);
+    const pos          = positions.find((_, i) => String(i) === val);
     if (!pos) return;
     const currentPrice = getPrice(pos.marketId, pos.platform);
     const sizeUSD      = currentPrice
       ? (pos.szi * currentPrice).toFixed(2)
       : (pos.szi * pos.entryPx).toFixed(2);
     onLoad({ ...pos, sizeUSD });
-    setSelected(''); // reset après chargement
+    setSelected('');
   };
 
   if (!address) return null;
@@ -287,11 +328,9 @@ function PositionLoader({ address, onLoad, getPrice }) {
         disabled={loading}
         className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors shrink-0"
       >
-        {loading ? (
-          <span className="animate-spin">⟳</span>
-        ) : (
-          '📂'
-        )}
+        <span className={loading ? 'animate-spin inline-block' : ''}>
+          {loading ? '⟳' : '📂'}
+        </span>
         Charger mes positions
       </button>
 
@@ -304,9 +343,11 @@ function PositionLoader({ address, onLoad, getPrice }) {
           <option value="">Sélectionner une position...</option>
           {positions.map((p, i) => (
             <option key={i} value={String(i)}>
-              {p.side} {p.szi} {p.label} @ ${fmt(p.entryPx, 2)} — {
-                PLATFORMS.find(pl => pl.id === p.platform)?.label ?? p.platform
-              } {p.unrealizedPnl >= 0 ? '📈' : '📉'} {p.unrealizedPnl >= 0 ? '+' : ''}${fmt(p.unrealizedPnl, 2)}
+              {p.side} {p.szi} {p.label} @ ${fmt(p.entryPx, 2)} —{' '}
+              {PLATFORMS.find(pl => pl.id === p.platform)?.label ?? p.platform}
+              {p.unrealizedPnl != null && (
+                `${p.unrealizedPnl >= 0 ? ' 📈 +' : ' 📉 '}$${fmt(p.unrealizedPnl, 2)}`
+              )}
             </option>
           ))}
         </select>
@@ -314,7 +355,7 @@ function PositionLoader({ address, onLoad, getPrice }) {
 
       {positions.length === 0 && !loading && (
         <span className="text-xs text-gray-500 italic">
-          Cliquez pour charger les positions ouvertes
+          Cliquez pour charger les positions ouvertes (HL + Extended)
         </span>
       )}
     </div>
@@ -342,8 +383,6 @@ function LegCard({
     <div className={`rounded-xl border p-4 flex flex-col gap-3 ${
       isLong ? 'border-green-700 bg-green-900/20' : 'border-red-700 bg-red-900/20'
     }`}>
-
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
@@ -356,7 +395,6 @@ function LegCard({
         {isSuggested && <span className="text-xs text-yellow-400 font-medium">⭐ Optimal</span>}
       </div>
 
-      {/* Prix market + limit */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs mb-0.5">Prix market</p>
@@ -368,7 +406,6 @@ function LegCard({
         </div>
       </div>
 
-      {/* Size */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Notionnel USD</p>
@@ -382,7 +419,6 @@ function LegCard({
         </div>
       </div>
 
-      {/* Levier & Marge */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Levier min. requis</p>
@@ -402,7 +438,6 @@ function LegCard({
         </div>
       </div>
 
-      {/* Funding */}
       <div className="bg-gray-900 rounded-lg px-3 py-2">
         <p className="text-gray-500 text-xs mb-1">Funding rate (1h)</p>
         <div className="flex items-center justify-between flex-wrap gap-1">
@@ -428,7 +463,6 @@ function LegCard({
         </div>
       </div>
 
-      {/* Fees */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Fees maker</p>
@@ -442,7 +476,6 @@ function LegCard({
         </div>
       </div>
 
-      {/* Copy */}
       {sizeDisplay && (
         <button
           onClick={() => navigator.clipboard.writeText(sizeDisplay.toFixed(6))}
@@ -482,11 +515,12 @@ export default function DeltaNeutralPage() {
     saveExtendedApiKey(key, 'Delta Neutral');
   };
 
+  // ✅ Dans le composant
   const handleLoadPosition = ({ marketId: mid, platform, sizeUSD: sz }) => {
-  if (mid) setMarketId(mid);
-  setPlatform1(platform);
-  setSizeUSD(sz);
-};
+    if (mid) setMarketId(mid);
+    setPlatform1(platform);
+    setSizeUSD(sz);
+  };
 
   const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
@@ -555,7 +589,6 @@ export default function DeltaNeutralPage() {
   return (
     <div className="px-4 pb-8 flex flex-col gap-4 pt-2">
 
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">
           Position Delta Neutral
@@ -566,7 +599,6 @@ export default function DeltaNeutralPage() {
         </div>
       </div>
 
-      {/* Wallets */}
       <WalletConfigPanel
         hlAddress={hlAddress}
         onHlChange={saveHlAddress}
@@ -574,25 +606,22 @@ export default function DeltaNeutralPage() {
         onExtChange={saveExtKey}
       />
 
-      {/* Position Loader */}
-{hlAddress && (
-  <div className="bg-gray-800 rounded-xl border border-gray-700 px-4 py-3">
-    <p className="text-xs text-gray-500 mb-2 font-medium">📊 Positions ouvertes (HL / trade.xyz / HyENA)</p>
-    <PositionLoader
-      address={hlAddress}
-      onLoad={handleLoadPosition}
-      getPrice={getPrice}
-    />
-    <p className="text-xs text-gray-600 mt-2">
-      Extended Exchange : récupération des positions non disponible via API
-    </p>
-  </div>
-)}
+      {/* ✅ Position Loader — HL + Extended */}
+      {(hlAddress || extApiKey) && (
+        <div className="bg-gray-800 rounded-xl border border-gray-700 px-4 py-3">
+          <p className="text-xs text-gray-500 mb-2 font-medium">
+            📊 Positions ouvertes (HL / trade.xyz / HyENA / Extended)
+          </p>
+          <PositionLoader
+            address={hlAddress}
+            extApiKey={extApiKey}
+            onLoad={handleLoadPosition}
+            getPrice={getPrice}
+          />
+        </div>
+      )}
 
-      {/* Config */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-4">
-
-        {/* ✅ Ligne unique : Marché + P1 + P2 + Size */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Marché</label>
@@ -610,7 +639,6 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 1</label>
             <select
@@ -623,7 +651,6 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 2</label>
             <select
@@ -636,7 +663,6 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Taille (USD notionnel)</label>
             <input
@@ -649,20 +675,19 @@ export default function DeltaNeutralPage() {
           </div>
         </div>
 
-        {/* ✅ Suggestion funding + Step size toggle sur la même ligne */}
         {(suggestion || fundingP1 != null || fundingP2 != null) && (
           <div className="rounded-lg px-3 py-2 bg-blue-900/20 border border-blue-700 text-xs flex items-center justify-between gap-4 flex-wrap">
             <div className="flex flex-col gap-1 flex-1">
               <p className="text-blue-300 font-bold">💡 Direction optimale selon les funding rates</p>
               <p className="text-gray-400">
-                {suggestion ? (
+                {suggestion && (
                   <>
                     <span className="text-green-400 font-medium">{plat1?.label} → {suggestion.p1}</span>
                     {' · '}
                     <span className="text-red-400 font-medium">{plat2?.label} → {suggestion.p2}</span>
                     {' · '}
                   </>
-                ) : null}
+                )}
                 {fundingP1 != null && fundingP2 != null && (
                   <span className="text-gray-500">
                     Différentiel : {fmtPct(Math.abs(fundingP1 - fundingP2))} /h
@@ -671,8 +696,6 @@ export default function DeltaNeutralPage() {
                 )}
               </p>
             </div>
-
-            {/* ✅ Step size toggle déplacé ici */}
             <div
               className="flex items-center gap-2 cursor-pointer shrink-0"
               onClick={() => setUseStepSize(s => !s)}
@@ -690,10 +713,8 @@ export default function DeltaNeutralPage() {
         )}
       </div>
 
-      {/* Fees config */}
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
-      {/* ✅ Écart de prix déplacé au-dessus des legs */}
       {calc?.spreadPct != null && (
         <div className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between ${
           Math.abs(calc.spreadPct) > 0.1
@@ -709,7 +730,6 @@ export default function DeltaNeutralPage() {
         </div>
       )}
 
-      {/* LegCards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <LegCard
           side={side1}
