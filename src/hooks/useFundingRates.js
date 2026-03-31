@@ -46,13 +46,14 @@ async function fetchExtFundingRate(extKey, apiKey) {
   if (!extKey || !apiKey) return null;
   try {
     const res = await fetch(
-      `/api/extended?endpoint=${encodeURIComponent(`/info/markets/${extKey}`)}`,
+      `/api/extended?endpoint=${encodeURIComponent('/info/markets')}`,
       { headers: { 'X-Api-Key': apiKey } }
     );
     if (!res.ok) return null;
     const data = await res.json();
-    // Extended retourne le funding dans marketStats
-    return parseFloat(data?.data?.marketStats?.fundingRate ?? null);
+    const market = (data.data || []).find(m => m.name === extKey);
+    if (!market) return null;
+    return parseFloat(market.marketStats?.fundingRate ?? null);
   } catch {
     return null;
   }
