@@ -325,14 +325,14 @@ function LegCard({
       {/* Fees */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
-          <p className="text-gray-500 text-xs">Fees taker</p>
-          <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
-          <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Fees maker</p>
           <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
           <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
+        </div>
+        <div className="bg-gray-900 rounded-lg px-3 py-2">
+          <p className="text-gray-500 text-xs">Fees taker</p>
+          <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
+          <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
         </div>
       </div>
 
@@ -414,20 +414,12 @@ export default function DeltaNeutralPage() {
     const fallback  = 0.0005;
 
     const limitP1 = platform1 === 'extended'
-      ? (side1 === 'LONG'
-          ? (extAsk ?? price1 * (1 - fallback))
-          : (extBid ?? price1 * (1 + fallback)))
-      : (side1 === 'LONG'
-          ? (book.ask ?? price1 * (1 - fallback))
-          : (book.bid ?? price1 * (1 + fallback)));
+      ? (side1 === 'LONG' ? (extAsk ?? price1 * (1 - fallback)) : (extBid ?? price1 * (1 + fallback)))
+      : (side1 === 'LONG' ? (book.ask ?? price1 * (1 - fallback)) : (book.bid ?? price1 * (1 + fallback)));
 
     const limitP2 = platform2 === 'extended'
-      ? (side2 === 'LONG'
-          ? (extAsk ?? price2 * (1 - fallback))
-          : (extBid ?? price2 * (1 + fallback)))
-      : (side2 === 'LONG'
-          ? (price2 * (1 - fallback))
-          : (price2 * (1 + fallback)));
+      ? (side2 === 'LONG' ? (extAsk ?? price2 * (1 - fallback)) : (extBid ?? price2 * (1 + fallback)))
+      : (side2 === 'LONG' ? (price2 * (1 - fallback)) : (price2 * (1 + fallback)));
 
     return {
       asset1,
@@ -473,8 +465,8 @@ export default function DeltaNeutralPage() {
       {/* Config */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-4">
 
-        {/* Marché + Plateformes */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* ✅ Ligne unique : Marché + P1 + P2 + Size */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Marché</label>
             <select
@@ -491,6 +483,7 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 1</label>
             <select
@@ -503,6 +496,7 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 2</label>
             <select
@@ -515,12 +509,9 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-        </div>
 
-        {/* Size + Step size */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
           <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Taille de position (USD notionnel)</label>
+            <label className="text-xs text-gray-500">Taille (USD notionnel)</label>
             <input
               type="number"
               value={sizeUSD}
@@ -529,64 +520,67 @@ export default function DeltaNeutralPage() {
               className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
             />
           </div>
-          <div className="flex items-center gap-3 pb-2">
-            <div
-              onClick={() => setUseStepSize(s => !s)}
-              className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${
-                useStepSize ? 'bg-blue-600' : 'bg-gray-600'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                useStepSize ? 'translate-x-5' : 'translate-x-0'
-              }`} />
-            </div>
-            <span
-              className="text-xs text-gray-400 cursor-pointer"
-              onClick={() => setUseStepSize(s => !s)}
-            >
-              Arrondir au step size minimum
-            </span>
-          </div>
         </div>
 
-        {/* Spread */}
-        {calc?.spreadPct != null && (
-          <div className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between ${
-            Math.abs(calc.spreadPct) > 0.1
-              ? 'bg-yellow-900/30 border border-yellow-700'
-              : 'bg-gray-900 border border-gray-700'
-          }`}>
-            <span className="text-gray-400">
-              Écart de prix {plat1?.label} / {plat2?.label}
-            </span>
-            <span className={`font-bold ${Math.abs(calc.spreadPct) > 0.1 ? 'text-yellow-400' : 'text-white'}`}>
-              {calc.spreadPct > 0 ? '+' : ''}{calc.spreadPct.toFixed(4)}%
-            </span>
-          </div>
-        )}
+        {/* ✅ Suggestion funding + Step size toggle sur la même ligne */}
+        {(suggestion || fundingP1 != null || fundingP2 != null) && (
+          <div className="rounded-lg px-3 py-2 bg-blue-900/20 border border-blue-700 text-xs flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-1 flex-1">
+              <p className="text-blue-300 font-bold">💡 Direction optimale selon les funding rates</p>
+              <p className="text-gray-400">
+                {suggestion ? (
+                  <>
+                    <span className="text-green-400 font-medium">{plat1?.label} → {suggestion.p1}</span>
+                    {' · '}
+                    <span className="text-red-400 font-medium">{plat2?.label} → {suggestion.p2}</span>
+                    {' · '}
+                  </>
+                ) : null}
+                {fundingP1 != null && fundingP2 != null && (
+                  <span className="text-gray-500">
+                    Différentiel : {fmtPct(Math.abs(fundingP1 - fundingP2))} /h
+                    {' '}({fmtPct(Math.abs(fundingP1 - fundingP2) * 24 * 365)} /an)
+                  </span>
+                )}
+              </p>
+            </div>
 
-        {/* Suggestion funding */}
-        {suggestion && (
-          <div className="rounded-lg px-3 py-2 bg-blue-900/20 border border-blue-700 text-xs flex flex-col gap-1">
-            <p className="text-blue-300 font-bold">💡 Direction optimale selon les funding rates</p>
-            <p className="text-gray-400">
-              <span className="text-green-400 font-medium">{plat1?.label} → {suggestion.p1}</span>
-              {' · '}
-              <span className="text-red-400 font-medium">{plat2?.label} → {suggestion.p2}</span>
-              {' · '}
-              {fundingP1 != null && fundingP2 != null && (
-                <span className="text-gray-500">
-                  Différentiel : {fmtPct(Math.abs(fundingP1 - fundingP2))} /h
-                  {' '}({fmtPct(Math.abs(fundingP1 - fundingP2) * 24 * 365)} /an)
-                </span>
-              )}
-            </p>
+            {/* ✅ Step size toggle déplacé ici */}
+            <div
+              className="flex items-center gap-2 cursor-pointer shrink-0"
+              onClick={() => setUseStepSize(s => !s)}
+            >
+              <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${
+                useStepSize ? 'bg-blue-600' : 'bg-gray-600'
+              }`}>
+                <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  useStepSize ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </div>
+              <span className="text-xs text-gray-400 whitespace-nowrap">Step size</span>
+            </div>
           </div>
         )}
       </div>
 
       {/* Fees config */}
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
+
+      {/* ✅ Écart de prix déplacé au-dessus des legs */}
+      {calc?.spreadPct != null && (
+        <div className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between ${
+          Math.abs(calc.spreadPct) > 0.1
+            ? 'bg-yellow-900/30 border border-yellow-700'
+            : 'bg-gray-900 border border-gray-700'
+        }`}>
+          <span className="text-gray-400">
+            Écart de prix {plat1?.label} / {plat2?.label}
+          </span>
+          <span className={`font-bold ${Math.abs(calc.spreadPct) > 0.1 ? 'text-yellow-400' : 'text-white'}`}>
+            {calc.spreadPct > 0 ? '+' : ''}{calc.spreadPct.toFixed(4)}%
+          </span>
+        </div>
+      )}
 
       {/* LegCards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -601,8 +595,8 @@ export default function DeltaNeutralPage() {
           marginAvailable={getMarginForPlatform(platform1)}
           fundingRate={fundingP1}
           isSuggested={!!suggestion}
-          feesTaker={fees[platform1]?.taker ?? 0}
           feesMaker={fees[platform1]?.maker ?? 0}
+          feesTaker={fees[platform1]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
         />
@@ -617,8 +611,8 @@ export default function DeltaNeutralPage() {
           marginAvailable={getMarginForPlatform(platform2)}
           fundingRate={fundingP2}
           isSuggested={!!suggestion}
-          feesTaker={fees[platform2]?.taker ?? 0}
           feesMaker={fees[platform2]?.maker ?? 0}
+          feesTaker={fees[platform2]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
         />
