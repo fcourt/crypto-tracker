@@ -1,39 +1,78 @@
-// ─── Hyperliquid ─────────────────────────────────────────────────────────────
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-
-// ─── Extended (Starknet) ─────────────────────────────────────────────────────
-import { ec } from 'starknet';
+import { ec, TypedData, stark } from 'starknet';
 
 const EXT_API_BASE = '/api/extended';
 
-// ─── Helper Extended : signature SNIP-12 ─────────────────────────────────────
+// ─── Domaine SNIP-12 Extended (Starknet Mainnet) ─────────────────────────────
+const STARKNET_DOMAIN = {
+  name:     'Perpetuals',
+  version:  'v0',
+  chainId:  'SN_MAIN',
+  revision: '1',
+};
 
+// ─── Types SNIP-12 pour un ordre Extended ────────────────────────────────────
+const ORDER_TYPES = {
+  StarknetDomain: [
+    { name: 'name',     type: 'shortstring' },
+    { name: 'version',  type: 'shortstring' },
+    { name: 'chainId',  type: 'shortstring' },
+    { name: 'revision', type: 'shortstring' },
+  ],
+  Order: [
+    { name: 'market',      type: 'shortstring' },
+    { name: 'side',        type: 'shortstring' },
+    { name: 'type',        type: 'shortstring' },
+    { name: 'size',        type: 'shortstring' },
+    { name: 'price',       type: 'shortstring' },
+    { name: 'timeInForce', type: 'shortstring' },
+    { name: 'nonce',       type: 'felt'        },
+    { name: 'expiresAt',   type: 'felt'        },
+    { name: 'l2Vault',     type: 'felt'        },
+  ],
+};
+
+// ─── Signature Extended (SNIP-12) ────────────────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce     = Date.now();
   const expiresAt = Math.floor(nonce / 1000) + 3600; // +1h
 
-  const payload = {
+  const sizeStr  = order.size.toFixed(order.szDecimals ?? 6);
+  const priceStr = order.limitPrice.toFixed(order.pxDecimals ?? 2);
+  const side     = order.isBuy ? 'BUY' : 'SELL';
+
+  const message = {
     market:      order.extKey,
-    side:        order.isBuy ? 'BUY' : 'SELL',
+    side,
     type:        'LIMIT',
-    size:        order.size.toFixed(order.szDecimals ?? 6),
-    price:       order.limitPrice.toFixed(order.pxDecimals ?? 2),
+    size:        sizeStr,
+    price:       priceStr,
     timeInForce: 'GTC',
-    l2Vault:     String(l2Vault),
-    expiresAt,
-    nonce,
+    nonce:       nonce.toString(),
+    expiresAt:   expiresAt.toString(),
+    l2Vault:     l2Vault.toString(),
   };
 
-  // Signature Starknet sur le hash du message
-  const msgHash = ec.starkCurve.pedersen(
-    BigInt(l2Vault),
-    BigInt(nonce)
+  // Hash SNIP-12 du message
+  const msgHash = TypedData.getMessageHash(
+    { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
+    stark.makeAddress(l2Vault.toString())
   );
-  const { r, s } = ec.starkCurve.sign(msgHash.toString(), starkPrivateKey);
 
-  const signedPayload = {
-    ...payload,
+  // Signature avec la clé privée Stark
+  const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
+
+  const payload = {
+    market:      order.extKey,
+    side,
+    type:        'LIMIT',
+    size:        sizeStr,
+    price:       priceStr,
+    timeInForce: 'GTC',
+    nonce,
+    expiresAt,
+    l2Vault:     parseInt(l2Vault),
     signature: {
       r: '0x' + r.toString(16),
       s: '0x' + s.toString(16),
@@ -47,26 +86,26 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
+        'User-Agent':   'crypto-perp-tracker/1.0',
       },
-      body: JSON.stringify(signedPayload),
+      body: JSON.stringify(payload),
     }
   );
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.message || `Extended HTTP ${res.status}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.status === 'ERROR') {
+    throw new Error(data?.error?.message || data?.message || `Extended HTTP ${res.status}`);
   }
-  return await res.json();
+  return data;
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function usePlaceOrder() {
-  // Lecture des clés depuis localStorage
-  const agentPrivateKey = localStorage.getItem('hl_agent_pk')       || '';
-  const hlVaultAddress  = localStorage.getItem('hl_vault_address')  || null;
-  const starkPrivateKey = localStorage.getItem('ext_stark_pk')      || '';
-  const l2Vault         = localStorage.getItem('ext_l2_vault')      || '';
+  const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
+  const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
+  const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
+  const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
   const extApiKey       = (() => {
     try {
       return JSON.parse(
@@ -78,18 +117,6 @@ export function usePlaceOrder() {
   const canTradeHL  = !!agentPrivateKey;
   const canTradeExt = !!starkPrivateKey && !!l2Vault;
 
-  /**
-   * Place un ordre sur la plateforme donnée
-   * @param {Object}  params
-   * @param {string}  params.platformId  — 'hyperliquid' | 'xyz' | 'hyena' | 'extended'
-   * @param {string}  params.extKey      — clé marché Extended (ex: 'BTC-USD-PERP')
-   * @param {number}  params.assetIndex  — index HL du coin (ex: 0 pour BTC)
-   * @param {boolean} params.isBuy       — true = LONG, false = SHORT
-   * @param {number}  params.size        — taille en asset
-   * @param {number}  params.limitPrice  — prix limit
-   * @param {number}  params.pxDecimals  — décimales prix
-   * @param {number}  params.szDecimals  — décimales size
-   */
   const placeOrder = async (params) => {
     const {
       platformId, extKey, assetIndex,
@@ -107,27 +134,26 @@ export function usePlaceOrder() {
       });
     }
 
-    // ── Hyperliquid / trade.xyz / HyENA ───────────────────────────────────────
+    // ── HL / trade.xyz / HyENA ────────────────────────────────────────────────
     if (!canTradeHL) throw new Error('Clé privée agent HL manquante');
 
-    // Le SDK gère toute la signature EIP-712 correctement [web:86]
     const wallet   = privateKeyToAccount(agentPrivateKey);
-const exchange = new ExchangeClient({
-  transport: new HttpTransport(),
-  wallet,
-});
+    const exchange = new ExchangeClient({
+      transport: new HttpTransport(),
+      wallet,
+    });
 
     const result = await exchange.order({
       orders: [{
-        a: assetIndex,                                // index numérique du coin
-        b: isBuy,                                     // true = buy/long
-        p: limitPrice.toFixed(pxDecimals ?? 2),      // prix limit
-        s: size.toFixed(szDecimals ?? 6),            // size
-        r: false,                                     // reduce_only
+        a: assetIndex,
+        b: isBuy,
+        p: limitPrice.toFixed(pxDecimals ?? 2),
+        s: size.toFixed(szDecimals ?? 6),
+        r: false,
         t: { limit: { tif: 'Gtc' } },
       }],
       grouping:     'na',
-      vaultAddress: hlVaultAddress || undefined,      // sous-compte si configuré
+      vaultAddress: hlVaultAddress || undefined,
     });
 
     if (result?.status === 'err') {
