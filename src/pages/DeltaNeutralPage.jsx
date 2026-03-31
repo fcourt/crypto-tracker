@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
+import { usePlaceOrder } from '../hooks/usePlaceOrder';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -203,57 +204,168 @@ function PriceDot({ fresh }) {
 
 function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
   const [open, setOpen] = useState(!hlAddress && !extApiKey);
+
+  // Nouveaux états pour les clés de trading
+  const [hlAgentPk,      setHlAgentPk]      = useState(() => localStorage.getItem('hl_agent_pk')     || '');
+  const [hlVaultAddress, setHlVaultAddress]  = useState(() => localStorage.getItem('hl_vault_address') || '');
+  const [extStarkPk,     setExtStarkPk]      = useState(() => localStorage.getItem('ext_stark_pk')    || '');
+  const [extL2Vault,     setExtL2Vault]      = useState(() => localStorage.getItem('ext_l2_vault')    || '');
+
+  const saveHlAgentPk      = v => { setHlAgentPk(v);      localStorage.setItem('hl_agent_pk',      v); };
+  const saveHlVaultAddress = v => { setHlVaultAddress(v); localStorage.setItem('hl_vault_address', v); };
+  const saveExtStarkPk     = v => { setExtStarkPk(v);     localStorage.setItem('ext_stark_pk',     v); };
+  const saveExtL2Vault     = v => { setExtL2Vault(v);     localStorage.setItem('ext_l2_vault',     v); };
+
+  const canTradeHL  = !!hlAgentPk;
+  const canTradeExt = !!extStarkPk && !!extL2Vault;
+
   return (
     <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-xs text-gray-400 hover:text-white transition-colors"
       >
-        <span className="font-medium flex items-center gap-2">
+        <span className="font-medium flex items-center gap-2 flex-wrap">
           🔑 Wallets & API Keys
           {hlAddress
-            ? <span className="text-green-400 ml-2">● HL connecté</span>
-            : <span className="text-red-400 ml-2">● HL non configuré</span>
-          }
+            ? <span className="text-green-400">● HL connecté</span>
+            : <span className="text-red-400">● HL non configuré</span>}
+          {canTradeHL
+            ? <span className="text-green-400">● HL trading ✓</span>
+            : <span className="text-yellow-500">● HL trading non configuré</span>}
           {extApiKey
-            ? <span className="text-green-400 ml-2">● Extended connecté</span>
-            : <span className="text-yellow-500 ml-2">● Extended non configuré</span>
-          }
+            ? <span className="text-green-400">● Extended connecté</span>
+            : <span className="text-yellow-500">● Extended non configuré</span>}
+          {canTradeExt
+            ? <span className="text-green-400">● Extended trading ✓</span>
+            : <span className="text-yellow-500">● Extended trading non configuré</span>}
         </span>
         <span>{open ? '▲' : '▼'}</span>
       </button>
+
       {open && (
-        <div className="px-4 pb-4 flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">
-              Adresse Hyperliquid / trade.xyz / HyENA
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={hlAddress}
-                onChange={e => onHlChange(e.target.value)}
-                placeholder="0x..."
-                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-              />
-              {hlAddress && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+        <div className="px-4 pb-4 flex flex-col gap-5">
+
+          {/* ── Hyperliquid ── */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-bold text-blue-400 border-b border-gray-700 pb-1">
+              Hyperliquid / trade.xyz / HyENA
+            </p>
+
+            {/* Adresse principale */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Adresse du compte principal</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={hlAddress}
+                  onChange={e => onHlChange(e.target.value)}
+                  placeholder="0x..."
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {hlAddress && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+              <p className="text-gray-600 text-xs">Lecture des positions et marge disponible</p>
             </div>
-            <p className="text-gray-600 text-xs">Marge disponible sur HL, trade.xyz et HyENA</p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Clé API Extended Exchange</label>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={extApiKey}
-                onChange={e => onExtChange(e.target.value)}
-                placeholder="Votre clé API..."
-                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-              />
-              {extApiKey && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+
+            {/* Clé privée agent */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">
+                Clé privée Agent Wallet
+                <span className="ml-2 text-gray-600">(HL › More › API › Generate)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={hlAgentPk}
+                  onChange={e => saveHlAgentPk(e.target.value)}
+                  placeholder="0x..."
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {hlAgentPk && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+              <p className="text-gray-600 text-xs">⚠️ Copiée une seule fois à la création — ne peut que trader, pas retirer</p>
             </div>
-            <p className="text-gray-600 text-xs">Marge disponible et funding rates Extended</p>
+
+            {/* Sous-compte optionnel */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">
+                Adresse sous-compte dédié
+                <span className="ml-2 text-gray-600">(optionnel — HL › Portfolio › Sub-accounts)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={hlVaultAddress}
+                  onChange={e => saveHlVaultAddress(e.target.value)}
+                  placeholder="0x... (laisser vide pour compte principal)"
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {hlVaultAddress && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+            </div>
           </div>
+
+          {/* ── Extended ── */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-bold text-purple-400 border-b border-gray-700 pb-1">
+              Extended Exchange
+            </p>
+
+            {/* Clé API lecture */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">Clé API (lecture)</label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={extApiKey}
+                  onChange={e => onExtChange(e.target.value)}
+                  placeholder="Votre clé API..."
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {extApiKey && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+              <p className="text-gray-600 text-xs">Marge disponible, positions, funding rates</p>
+            </div>
+
+            {/* Stark Private Key */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">
+                Stark Private Key
+                <span className="ml-2 text-gray-600">(Extended › Account › API Management)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={extStarkPk}
+                  onChange={e => saveExtStarkPk(e.target.value)}
+                  placeholder="0x..."
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {extStarkPk && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+              <p className="text-gray-600 text-xs">⚠️ Copiée une seule fois à la création — ne peut que trader, pas retirer</p>
+            </div>
+
+            {/* l2Vault */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">
+                l2Vault (ID sous-compte)
+                <span className="ml-2 text-gray-600">(Extended › Account › API Management)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={extL2Vault}
+                  onChange={e => saveExtL2Vault(e.target.value)}
+                  placeholder="ex: 123456"
+                  className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+                {extL2Vault && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
     </div>
@@ -367,6 +479,7 @@ function LegCard({
   sizeUSD, sizeAsset, marginAvailable,
   fundingRate, isSuggested, feesMaker, feesTaker,
   useStepSize, stepSize,
+  onPlaceOrder, isPlacingOrder, canTrade,
 }) {
   const isLong     = side === 'LONG';
   const fundingNet = fundingRate != null ? (isLong ? -fundingRate : fundingRate) : null;
@@ -476,13 +589,37 @@ function LegCard({
         </div>
       </div>
 
+      {/* ── Boutons action (remplacer l'ancien bouton "Copier la size") ── */}
       {sizeDisplay && (
-        <button
-          onClick={() => navigator.clipboard.writeText(sizeDisplay.toFixed(6))}
-          className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium py-2 rounded-lg transition-colors"
-        >
-          📋 Copier la size : {fmt(sizeDisplay, 6)}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => navigator.clipboard.writeText(sizeDisplay.toFixed(6))}
+            className="w-full bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium py-2 rounded-lg transition-colors"
+          >
+            📋 Copier la size : {fmt(sizeDisplay, 6)}
+          </button>
+
+          {canTrade ? (
+            <button
+              onClick={onPlaceOrder}
+              disabled={isPlacingOrder || !limitPrice || !sizeDisplay}
+              className={`w-full text-white text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                isLong
+                  ? 'bg-green-700 hover:bg-green-600 disabled:opacity-50'
+                  : 'bg-red-700   hover:bg-red-600   disabled:opacity-50'
+              }`}
+            >
+              {isPlacingOrder
+                ? <><span className="animate-spin">⟳</span> Envoi en cours...</>
+                : <>{isLong ? '🟢' : '🔴'} Ouvrir {side} sur {platform?.label}</>
+              }
+            </button>
+          ) : (
+            <div className="w-full bg-gray-800 border border-gray-700 text-gray-500 text-xs py-2 rounded-lg text-center">
+              🔒 Configurer les clés pour trader
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -505,6 +642,11 @@ export default function DeltaNeutralPage() {
     () => getExtendedApiKeys()[0]?.apiKey || ''
   );
 
+  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
+  const [placingLeg1, setPlacingLeg1] = useState(false);
+  const [placingLeg2, setPlacingLeg2] = useState(false);
+  const [tradeStatus, setTradeStatus] = useState(null); // { type: 'success'|'error', msg: string }
+
   const saveHlAddress = (addr) => {
     setHlAddress(addr);
     localStorage.setItem('hl_address', addr);
@@ -515,12 +657,72 @@ export default function DeltaNeutralPage() {
     saveExtendedApiKey(key, 'Delta Neutral');
   };
 
+  // Position déjà chargée depuis PositionLoader ?
+  const [loadedPosition, setLoadedPosition] = useState(null);
+  
   // ✅ Dans le composant
-  const handleLoadPosition = ({ marketId: mid, platform, sizeUSD: sz }) => {
-    if (mid) setMarketId(mid);
-    setPlatform1(platform);
-    setSizeUSD(sz);
-  };
+  const handleLoadPosition = (pos) => {
+  setLoadedPosition(pos);
+  if (pos.marketId)  setMarketId(pos.marketId);
+  setPlatform1(pos.platform);
+  setSizeUSD(pos.sizeUSD);
+};
+
+const canTradePlatform = (platformId) => {
+  if (platformId === 'extended') return canTradeExt;
+  return canTradeHL;
+};
+
+const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => ({
+  platformId,
+  hlKey:      market?.hlKey,
+  extKey:     market?.extKey,
+  assetIndex: market?.assetIndex ?? 0,
+  isBuy:      side === 'LONG',
+  size:       useStepSize && getStepSize(marketId)
+    ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
+    : sizeAsset,
+  limitPrice,
+  pxDecimals: market?.pxDecimals ?? 2,
+  szDecimals: market?.szDecimals ?? 6,
+});
+
+const handlePlaceLeg = async (legNum) => {
+  const setter    = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
+  const platformId = legNum === 1 ? platform1 : platform2;
+  const side      = legNum === 1 ? side1 : side2;
+  const sizeAsset = legNum === 1 ? calc?.asset1 : calc?.asset2;
+  const limitPx   = legNum === 1 ? calc?.limitP1 : calc?.limitP2;
+
+  setter(true);
+  setTradeStatus(null);
+  try {
+    await placeOrder(buildOrderParams(platformId, side, sizeAsset, limitPx));
+    setTradeStatus({ type: 'success', msg: `✅ Ordre ${side} envoyé sur ${PLATFORMS.find(p => p.id === platformId)?.label}` });
+  } catch (e) {
+    setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
+  } finally {
+    setter(false);
+  }
+};
+
+const handlePlaceBothLegs = async () => {
+  setPlacingLeg1(true);
+  setPlacingLeg2(true);
+  setTradeStatus(null);
+  try {
+    await Promise.all([
+      placeOrder(buildOrderParams(platform1, side1, calc?.asset1, calc?.limitP1)),
+      placeOrder(buildOrderParams(platform2, side2, calc?.asset2, calc?.limitP2)),
+    ]);
+    setTradeStatus({ type: 'success', msg: '✅ Les 2 legs envoyés simultanément !' });
+  } catch (e) {
+    setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
+  } finally {
+    setPlacingLeg1(false);
+    setPlacingLeg2(false);
+  }
+};
 
   const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
@@ -764,7 +966,55 @@ export default function DeltaNeutralPage() {
           stepSize={getStepSize(marketId)}
         />
       </div>
+{/* ── Feedback statut ── */}
+{tradeStatus && (
+  <div className={`rounded-lg px-4 py-3 text-sm font-medium text-center ${
+    tradeStatus.type === 'success'
+      ? 'bg-green-900/40 border border-green-700 text-green-300'
+      : 'bg-red-900/40   border border-red-700   text-red-300'
+  }`}>
+    {tradeStatus.msg}
+  </div>
+)}
 
+{/* ── Bouton 2 legs simultanés (si aucune position chargée) ── */}
+{calc && !loadedPosition && (canTradeHL || canTradeExt) && (
+  <button
+    onClick={handlePlaceBothLegs}
+    disabled={placingLeg1 || placingLeg2 || !calc.limitP1 || !calc.limitP2}
+    className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm"
+  >
+    {(placingLeg1 || placingLeg2)
+      ? <><span className="animate-spin">⟳</span> Envoi des 2 legs...</>
+      : <>🚀 Ouvrir les 2 legs simultanément — {plat1?.label} + {plat2?.label}</>
+    }
+  </button>
+)}
+
+{/* ── Bouton 1 leg restant (si position déjà chargée) ── */}
+{calc && loadedPosition && (
+  <div className="rounded-xl border border-yellow-700 bg-yellow-900/20 px-4 py-3 flex flex-col gap-2">
+    <p className="text-xs text-yellow-400 font-medium">
+      ⚡ Position {loadedPosition.side} déjà ouverte sur {PLATFORMS.find(p => p.id === loadedPosition.platform)?.label} — ouverture du leg manquant uniquement
+    </p>
+    <button
+      onClick={() => handlePlaceLeg(loadedPosition.platform === platform1 ? 2 : 1)}
+      disabled={placingLeg1 || placingLeg2}
+      className="w-full bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 text-white font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
+    >
+      {(placingLeg1 || placingLeg2)
+        ? <><span className="animate-spin">⟳</span> Envoi...</>
+        : <>🚀 Ouvrir le leg manquant</>
+      }
+    </button>
+    <button
+      onClick={() => setLoadedPosition(null)}
+      className="text-xs text-gray-500 hover:text-gray-300 text-center transition-colors"
+    >
+      ✕ Annuler (ouvrir les 2 legs)
+    </button>
+  </div>
+)}
     </div>
   );
 }
