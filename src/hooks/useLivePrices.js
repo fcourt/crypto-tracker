@@ -53,43 +53,59 @@ export const PLATFORMS = [
   { id: 'extended',    label: 'Extended',    source: 'ext' },
 ];
 
+// ─── Fetch HL : prix + step sizes (natif + HIP-3 xyz) ────────────────────────
+
 async function fetchHLMids() {
-  // Un appel pour les perps natifs HL (crypto), un pour les marchés XYZ (equities/commodités)
   const [resNative, resXyz] = await Promise.all([
     fetch(HL_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'allMids' }),           // dex: "" par défaut = crypto natif
+      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
     }),
     fetch(HL_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'allMids', dex: 'xyz' }), // marchés HIP-3 trade.xyz
+      body: JSON.stringify({ type: 'metaAndAssetCtxs', dex: 'xyz' }),
     }),
   ]);
 
-  const [nativeMids, xyzMids] = await Promise.all([
+  const [nativeData, xyzData] = await Promise.all([
     resNative.json(),
     resXyz.json(),
   ]);
 
-  // Merge des deux : xyz: préfixe pour éviter les collisions
-  const prices = { ...nativeMids };
-  Object.entries(xyzMids || {}).forEach(([k, v]) => {
-    prices[k] = v;  
+  const prices    = {};
+  const stepSizes = {};
+
+  // Perps natifs HL (crypto)
+  const [nativeMeta, nativeCtxs] = Array.isArray(nativeData) ? nativeData : [null, null];
+  (nativeMeta?.universe || []).forEach((asset, i) => {
+    if (nativeCtxs?.[i]?.markPx) {
+      prices[asset.name]    = nativeCtxs[i].markPx;
+      stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 3));
+    }
   });
 
-  //console.log('XYZ KEYS:', Object.keys(prices).filter(k => k.startsWith('xyz:')));
+  // Marchés HIP-3 trade.xyz (asset.name est déjà "xyz:TSLA" etc.)
+  const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
+  (xyzMeta?.universe || []).forEach((asset, i) => {
+    if (xyzCtxs?.[i]?.markPx) {
+      prices[asset.name]    = xyzCtxs[i].markPx;
+      stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 2));
+    }
+  });
 
-  return prices;
+  return { prices, stepSizes };
 }
+
+// ─── Fetch Extended : prix ────────────────────────────────────────────────────
 
 async function fetchExtMids() {
   const res = await fetch(
     `/api/extended?endpoint=${encodeURIComponent('/info/markets')}`
   );
   const data = await res.json();
-  const map = {};
+  const map  = {};
   (data.data || []).forEach(m => {
     const key   = m.name;
     const price = parseFloat(m.marketStats?.lastPrice || 0);
@@ -98,17 +114,24 @@ async function fetchExtMids() {
   return map;
 }
 
+// ─── Hook principal ───────────────────────────────────────────────────────────
+
 export function useLivePrices(intervalMs = 3000) {
   const [hlMids,     setHlMids]     = useState({});
+  const [hlSteps,    setHlSteps]    = useState({});
   const [extMids,    setExtMids]    = useState({});
   const [lastUpdate, setLastUpdate] = useState(null);
   const timer = useRef(null);
 
   const fetchAll = async () => {
     try {
-      const [hl, ext] = await Promise.all([fetchHLMids(), fetchExtMids()]);
-      setHlMids(hl  || {});
-      setExtMids(ext || {});
+      const [{ prices, stepSizes }, ext] = await Promise.all([
+        fetchHLMids(),
+        fetchExtMids(),
+      ]);
+      setHlMids(prices    || {});
+      setHlSteps(stepSizes || {});
+      setExtMids(ext       || {});
       setLastUpdate(new Date());
     } catch (e) {
       console.warn('useLivePrices error:', e.message);
@@ -122,16 +145,24 @@ export function useLivePrices(intervalMs = 3000) {
   }, []);
 
   const getPrice = (marketId, platformId) => {
-    const market   = MARKETS.find(m => m.id === marketId);
-    const platform = PLATFORMS.find(p => p.id === platformId);
-    if (!market || !platform) return null;
-    if (platform.source === 'hl')  return parseFloat(hlMids[market.hlKey]) || null;  // ✅ hlMids
-    if (platform.source === 'ext') {
-      if (!market.extKey) return null;
-      return parseFloat(extMids[market.extKey]) || null;
+    const market = MARKETS.find(m => m.id === marketId);
+    if (!market) return null;
+    // Pas de clé HL → fallback sur Extended
+    if (!market.hlKey) {
+      return market.extKey ? parseFloat(extMids[market.extKey]) || null : null;
     }
+    const platform = PLATFORMS.find(p => p.id === platformId);
+    if (!platform) return null;
+    if (platform.source === 'hl')  return parseFloat(hlMids[market.hlKey]) || null;
+    if (platform.source === 'ext') return market.extKey ? parseFloat(extMids[market.extKey]) || null : null;
     return null;
   };
 
-  return { getPrice, hlMids, extMids, lastUpdate };
+  const getStepSize = (marketId) => {
+    const market = MARKETS.find(m => m.id === marketId);
+    if (!market?.hlKey) return 0.01;
+    return hlSteps[market.hlKey] ?? 0.01;
+  };
+
+  return { getPrice, getStepSize, hlMids, extMids, lastUpdate };
 }
