@@ -76,7 +76,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const res = await fetch(
   `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/orders')}`,
     {
-      method:  'POST',
+      method:  'PUT',
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
