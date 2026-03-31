@@ -72,26 +72,53 @@ function getRateFromMap(rates, marketId, platformId) {
   return null; // extended géré séparément via API
 }
 
+async function fetchExtMarketData(extKey, apiKey) {
+  if (!extKey || !apiKey) return { fundingRate: null, bid: null, ask: null };
+  try {
+    const res = await fetch(
+      `/api/extended?endpoint=${encodeURIComponent('/info/markets')}`,
+      { headers: { 'X-Api-Key': apiKey } }
+    );
+    if (!res.ok) return { fundingRate: null, bid: null, ask: null };
+    const data   = await res.json();
+    const market = (data.data || []).find(m => m.name === extKey);
+    if (!market) return { fundingRate: null, bid: null, ask: null };
+    return {
+      fundingRate: parseFloat(market.marketStats?.fundingRate ?? null),
+      bid:         parseFloat(market.marketStats?.bidPrice   ?? null),
+      ask:         parseFloat(market.marketStats?.askPrice   ?? null),
+    };
+  } catch {
+    return { fundingRate: null, bid: null, ask: null };
+  }
+}
+
 export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = '') {
-  const [rates, setRates] = useState({ p1: null, p2: null });
+  const [rates, setRates] = useState({ p1: null, p2: null, extBid: null, extAsk: null });
 
   useEffect(() => {
     if (!marketId || !platform1Id || !platform2Id) return;
 
     const refresh = async () => {
       try {
-        const market = MARKETS.find(m => m.id === marketId);
+        const market  = MARKETS.find(m => m.id === marketId);
         const hlRates = await fetchAllFundingRates();
 
+        let extBid = null, extAsk = null;
+
         const p1 = platform1Id === 'extended'
-          ? await fetchExtFundingRate(market?.extKey, extApiKey)
+          ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
+              extBid = d.bid; extAsk = d.ask; return d.fundingRate;
+            })
           : getRateFromMap(hlRates, marketId, platform1Id);
 
         const p2 = platform2Id === 'extended'
-          ? await fetchExtFundingRate(market?.extKey, extApiKey)
+          ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
+              extBid = d.bid; extAsk = d.ask; return d.fundingRate;
+            })
           : getRateFromMap(hlRates, marketId, platform2Id);
 
-        setRates({ p1, p2 });
+        setRates({ p1, p2, extBid, extAsk });
       } catch (e) {
         console.warn('useFundingRates error:', e.message);
       }
@@ -100,7 +127,7 @@ export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = 
     refresh();
     const t = setInterval(refresh, 60000);
     return () => clearInterval(t);
-  }, [marketId, platform1Id, platform2Id]);
+  }, [marketId, platform1Id, platform2Id, extApiKey]);
 
   return rates;
 }
