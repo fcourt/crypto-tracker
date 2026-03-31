@@ -1,31 +1,28 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
-import { getExtendedApiKeys } from '../hooks/useExtendedData';
+import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
-
 const LEVERAGE_STEPS = [1, 2, 3, 5, 10, 15, 20, 25, 50];
-
 const DEFAULT_FEES = {
   hyperliquid: { maker: 0.0001,  taker: 0.00035 },
-  xyz:         { maker: 0.0002,  taker: 0.0005  },
+  xyz:         { maker: 0.00003, taker: 0.00009 },
   hyena:       { maker: 0.0002,  taker: 0.0005  },
   extended:    { maker: 0.0002,  taker: 0.0005  },
 };
-
 const FEES_STORAGE_KEY = 'dn_platform_fees';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const fmt     = (n, d = 2) => n == null ? '—' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: d }).format(n);
-const fmtUSD  = (n) => n == null ? '—' : '$' + fmt(n, 2);
-const fmtPct  = (n) => n == null ? '—' : (n >= 0 ? '+' : '') + (n * 100).toFixed(4) + '%';
+const fmt    = (n, d = 2) => n == null ? '—' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: d }).format(n);
+const fmtUSD = (n) => n == null ? '—' : '$' + fmt(n, 2);
+const fmtPct = (n) => n == null ? '—' : (n >= 0 ? '+' : '') + (n * 100).toFixed(4) + '%';
 
 function minLeverageFor(notional, margin) {
-  if (!margin || margin <= 0) return null;
+  if (!margin || margin <= 0 || !notional) return null;
   const raw = notional / margin;
   return LEVERAGE_STEPS.find(l => l >= raw) ?? LEVERAGE_STEPS[LEVERAGE_STEPS.length - 1];
 }
@@ -39,21 +36,21 @@ function saveFees(fees) {
   localStorage.setItem(FEES_STORAGE_KEY, JSON.stringify(fees));
 }
 
-// ─── Hooks ───────────────────────────────────────────────────────────────────
+// ─── Hooks locaux ─────────────────────────────────────────────────────────────
 
 function useHLMargin(address) {
   const [margin, setMargin] = useState(null);
   useEffect(() => {
-    if (!address) return;
+    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
     const fetch_ = async () => {
       try {
-        const res = await fetch(HL_API, {
+        const res   = await fetch(HL_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type: 'clearinghouseState', user: address }),
         });
         const state = await res.json();
-        const accountValue    = parseFloat(state?.crossMarginSummary?.accountValue || 0);
+        const accountValue    = parseFloat(state?.crossMarginSummary?.accountValue    || 0);
         const totalMarginUsed = parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
         setMargin(accountValue - totalMarginUsed);
       } catch { setMargin(null); }
@@ -68,12 +65,13 @@ function useHLMargin(address) {
 function useExtMargin(apiKey) {
   const [margin, setMargin] = useState(null);
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey?.trim()) return;
     const fetch_ = async () => {
       try {
-        const res  = await fetch(`/api/extended?endpoint=${encodeURIComponent('/user/balance')}`, {
-          headers: { 'X-Api-Key': apiKey },
-        });
+        const res  = await fetch(
+          `/api/extended?endpoint=${encodeURIComponent('/user/balance')}`,
+          { headers: { 'X-Api-Key': apiKey } }
+        );
         const data = await res.json();
         setMargin(parseFloat(data?.data?.availableForTrade || 0));
       } catch { setMargin(null); }
@@ -112,7 +110,79 @@ function useOrderBook(hlKey) {
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function PriceDot({ fresh }) {
-  return <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${fresh ? 'bg-green-400' : 'bg-yellow-500'}`} />;
+  return (
+    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${fresh ? 'bg-green-400' : 'bg-yellow-500'}`} />
+  );
+}
+
+function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
+  const [open, setOpen] = useState(!hlAddress && !extApiKey);
+
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-xs text-gray-400 hover:text-white transition-colors"
+      >
+        <span className="font-medium flex items-center gap-2">
+          🔑 Wallets & API Keys
+          {hlAddress
+            ? <span className="text-green-400 ml-2">● HL connecté</span>
+            : <span className="text-red-400 ml-2">● HL non configuré</span>
+          }
+          {extApiKey
+            ? <span className="text-green-400 ml-2">● Extended connecté</span>
+            : <span className="text-yellow-500 ml-2">● Extended non configuré</span>
+          }
+        </span>
+        <span>{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">
+              Adresse Hyperliquid / trade.xyz / HyENA
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={hlAddress}
+                onChange={e => onHlChange(e.target.value)}
+                placeholder="0x..."
+                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+              {hlAddress && (
+                <span className="flex items-center text-xs text-green-400 px-2">✓</span>
+              )}
+            </div>
+            <p className="text-gray-600 text-xs">
+              Marge disponible sur HL, trade.xyz et HyENA
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Clé API Extended Exchange</label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={extApiKey}
+                onChange={e => onExtChange(e.target.value)}
+                placeholder="Votre clé API..."
+                className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+              />
+              {extApiKey && (
+                <span className="flex items-center text-xs text-green-400 px-2">✓</span>
+              )}
+            </div>
+            <p className="text-gray-600 text-xs">
+              Marge disponible et funding rates Extended
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FeeConfigPanel({ fees, onChange }) {
@@ -156,14 +226,21 @@ function FeeConfigPanel({ fees, onChange }) {
   );
 }
 
-function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAsset, marginAvailable, fundingRate, isSuggested, feesMaker, feesTaker, useStepSize, stepSize }) {
-  const isLong      = side === 'LONG';
-  const fundingSign = isLong ? -1 : 1; // long paie quand funding > 0, short reçoit
-  const fundingNet  = fundingRate != null ? fundingRate * fundingSign : null;
-  const receivePay  = fundingNet == null ? null : fundingNet >= 0 ? 'reçoit' : 'paie';
+function LegCard({
+  side, platform, price, limitPrice, leverage,
+  sizeUSD, sizeAsset, marginAvailable,
+  fundingRate, isSuggested, feesMaker, feesTaker,
+  useStepSize, stepSize,
+}) {
+  const isLong     = side === 'LONG';
+  // Long paie quand funding > 0, reçoit quand < 0. Inverse pour short.
+  const fundingNet = fundingRate != null ? (isLong ? -fundingRate : fundingRate) : null;
+  const receivePay = fundingNet == null ? null : fundingNet >= 0 ? 'reçoit' : 'paie';
+
   const sizeDisplay = useStepSize && stepSize && sizeAsset
     ? Math.floor(sizeAsset / stepSize) * stepSize
     : sizeAsset;
+
   const feeMaker = sizeUSD != null ? sizeUSD * feesMaker : null;
   const feeTaker = sizeUSD != null ? sizeUSD * feesTaker : null;
 
@@ -171,18 +248,23 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
     <div className={`rounded-xl border p-4 flex flex-col gap-3 ${
       isLong ? 'border-green-700 bg-green-900/20' : 'border-red-700 bg-red-900/20'
     }`}>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isLong ? 'bg-green-700 text-white' : 'bg-red-700 text-white'}`}>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            isLong ? 'bg-green-700 text-white' : 'bg-red-700 text-white'
+          }`}>
             {side}
           </span>
           <span className="text-sm font-bold text-white">{platform?.label}</span>
         </div>
-        {isSuggested && <span className="text-xs text-yellow-400 font-medium">⭐ Optimal</span>}
+        {isSuggested && (
+          <span className="text-xs text-yellow-400 font-medium">⭐ Optimal</span>
+        )}
       </div>
 
-      {/* Prix */}
+      {/* Prix market + limit */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs mb-0.5">Prix market</p>
@@ -201,7 +283,9 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
           <p className="text-white font-bold">{fmtUSD(sizeUSD)}</p>
         </div>
         <div className="bg-gray-900 rounded-lg px-3 py-2">
-          <p className="text-gray-500 text-xs">Size (asset){useStepSize ? ' *' : ''}</p>
+          <p className="text-gray-500 text-xs">
+            Size (asset){useStepSize ? <span className="text-blue-400 ml-1">step</span> : ''}
+          </p>
           <p className="text-white font-bold">{sizeDisplay ? fmt(sizeDisplay, 6) : '—'}</p>
         </div>
       </div>
@@ -210,11 +294,17 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Levier min. requis</p>
-          <p className="text-blue-300 font-bold">{leverage != null ? `${leverage}x` : '—'}</p>
+          <p className="text-blue-300 font-bold text-lg">
+            {leverage != null ? `${leverage}x` : '—'}
+          </p>
         </div>
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Marge disponible</p>
-          <p className={`font-bold ${marginAvailable == null ? 'text-gray-500' : marginAvailable > 0 ? 'text-green-300' : 'text-red-400'}`}>
+          <p className={`font-bold ${
+            marginAvailable == null
+              ? 'text-gray-500'
+              : marginAvailable > 0 ? 'text-green-300' : 'text-red-400'
+          }`}>
             {marginAvailable != null ? fmtUSD(marginAvailable) : '—'}
           </p>
         </div>
@@ -223,15 +313,23 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
       {/* Funding */}
       <div className="bg-gray-900 rounded-lg px-3 py-2">
         <p className="text-gray-500 text-xs mb-1">Funding rate (1h)</p>
-        <div className="flex items-center justify-between">
-          <p className={`font-bold text-sm ${fundingRate == null ? 'text-gray-500' : fundingRate >= 0 ? 'text-orange-400' : 'text-green-400'}`}>
-            {fmtPct(fundingRate)}
-            <span className="text-gray-500 font-normal ml-1 text-xs">
+        <div className="flex items-center justify-between flex-wrap gap-1">
+          <div>
+            <span className={`font-bold text-sm ${
+              fundingRate == null ? 'text-gray-500'
+              : fundingRate >= 0  ? 'text-orange-400'
+              : 'text-green-400'
+            }`}>
+              {fmtPct(fundingRate)}
+            </span>
+            <span className="text-gray-500 text-xs ml-1">
               ({fmtPct(fundingRate != null ? fundingRate * 24 * 365 : null)} /an)
             </span>
-          </p>
+          </div>
           {fundingNet != null && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${fundingNet >= 0 ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              fundingNet >= 0 ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
+            }`}>
               {side} {receivePay} le funding
             </span>
           )}
@@ -242,17 +340,17 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Fees maker</p>
-          <p className="text-yellow-300 font-bold text-sm">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
+          <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
           <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
         </div>
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Fees taker</p>
-          <p className="text-yellow-300 font-bold text-sm">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
+          <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
           <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
         </div>
       </div>
 
-      {/* Copy button */}
+      {/* Copy */}
       {sizeDisplay && (
         <button
           onClick={() => navigator.clipboard.writeText(sizeDisplay.toFixed(6))}
@@ -268,50 +366,62 @@ function LegCard({ side, platform, price, limitPrice, leverage, sizeUSD, sizeAss
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function DeltaNeutralPage() {
-  const [marketId,     setMarketId]     = useState('BTC');
-  const [platform1,    setPlatform1]    = useState('hyperliquid');
-  const [platform2,    setPlatform2]    = useState('extended');
-  const [sizeUSD,      setSizeUSD]      = useState('');
-  const [useStepSize,  setUseStepSize]  = useState(false);
-  const [fees,         setFees]         = useState(loadFees);
+  const [marketId,    setMarketId]    = useState('BTC');
+  const [platform1,   setPlatform1]   = useState('hyperliquid');
+  const [platform2,   setPlatform2]   = useState('extended');
+  const [sizeUSD,     setSizeUSD]     = useState('');
+  const [useStepSize, setUseStepSize] = useState(false);
+  const [fees,        setFees]        = useState(loadFees);
 
-  // Adresse HL et clé Extended depuis localStorage (supposées déjà configurées ailleurs)
-  const hlAddress  = localStorage.getItem('hl_address') || '';
-  const extApiKeys = getExtendedApiKeys();
-  const extApiKey  = extApiKeys[0]?.apiKey || '';
+  const [hlAddress, setHlAddress] = useState(
+    () => localStorage.getItem('hl_address') || ''
+  );
+  const [extApiKey, setExtApiKey] = useState(
+    () => getExtendedApiKeys()[0]?.apiKey || ''
+  );
 
-  const { getPrice, lastUpdate } = useLivePrices(3000);
-  const fundingRates = useFundingRates(marketId, platform1, platform2);
+  const saveHlAddress = (addr) => {
+    setHlAddress(addr);
+    localStorage.setItem('hl_address', addr);
+  };
+
+  const saveExtKey = (key) => {
+    setExtApiKey(key);
+    saveExtendedApiKey(key, 'Delta Neutral');
+  };
+
+  const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
+  const fundingRates = useFundingRates(marketId, platform1, platform2, extApiKey);
   const hlMargin     = useHLMargin(hlAddress);
   const extMargin    = useExtMargin(extApiKey);
 
-  const market  = MARKETS.find(m => m.id === marketId);
-  const plat1   = PLATFORMS.find(p => p.id === platform1);
-  const plat2   = PLATFORMS.find(p => p.id === platform2);
-  const price1  = getPrice(marketId, platform1);
-  const price2  = getPrice(marketId, platform2);
-  const book    = useOrderBook(market?.hlKey);
+  const market = MARKETS.find(m => m.id === marketId);
+  const plat1  = PLATFORMS.find(p => p.id === platform1);
+  const plat2  = PLATFORMS.find(p => p.id === platform2);
+  const price1 = getPrice(marketId, platform1);
+  const price2 = getPrice(marketId, platform2);
+  const book   = useOrderBook(market?.hlKey);
 
   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
-    if (platformId === 'hyena')    return null; // USDe — à implémenter si besoin
-    return hlMargin; // hyperliquid, xyz partagent le même wallet HL
+    if (platformId === 'hyena')    return null; // USDe — à implémenter
+    return hlMargin;
   };
 
-  // Suggestion direction basée sur spread + funding
+  // Suggestion direction : SHORT là où funding > 0 (on reçoit), LONG là où funding < 0
   const suggestion = useMemo(() => {
     const r1 = fundingRates.p1;
     const r2 = fundingRates.p2;
-    // On veut SHORT là où funding > 0 (on reçoit), LONG là où funding < 0 (on reçoit)
-    // Si r1 < r2 → être LONG sur P1 (funding favorable pour long sur P1)
     if (r1 == null || r2 == null) return null;
-    return r1 <= r2 ? { p1: 'LONG', p2: 'SHORT' } : { p1: 'SHORT', p2: 'LONG' };
+    // On préfère être LONG sur la plateforme avec le funding le plus bas
+    return r1 <= r2
+      ? { p1: 'LONG', p2: 'SHORT' }
+      : { p1: 'SHORT', p2: 'LONG' };
   }, [fundingRates]);
 
   const side1 = suggestion?.p1 ?? 'LONG';
   const side2 = suggestion?.p2 ?? 'SHORT';
 
-  // Calculs
   const calc = useMemo(() => {
     const val = parseFloat(sizeUSD);
     if (!val || val <= 0 || !price1 || !price2) return null;
@@ -320,22 +430,26 @@ export default function DeltaNeutralPage() {
     const asset2    = val / price2;
     const spreadPct = ((price1 - price2) / price2) * 100;
 
-    // Prix limit maker : bid pour SHORT (vendre au bid), ask pour LONG (acheter à l'ask)
-    // On utilise le mid ± 0.05% si book indisponible
-    const fallbackSpread = 0.0005;
-    const limitP1 = side1 === 'LONG'
-      ? (book.ask ?? (price1 * (1 - fallbackSpread)))
-      : (book.bid ?? (price1 * (1 + fallbackSpread)));
-    const limitP2 = side2 === 'LONG'
-      ? (price2 * (1 - fallbackSpread))
-      : (price2 * (1 + fallbackSpread));
+    const fallback  = 0.0005;
+    const limitP1   = side1 === 'LONG'
+      ? (book.ask ?? price1 * (1 - fallback))
+      : (book.bid ?? price1 * (1 + fallback));
+    const limitP2   = side2 === 'LONG'
+      ? price2 * (1 - fallback)
+      : price2 * (1 + fallback);
 
     const margin1   = getMarginForPlatform(platform1);
     const margin2   = getMarginForPlatform(platform2);
-    const leverage1 = minLeverageFor(val, margin1);
-    const leverage2 = minLeverageFor(val, margin2);
 
-    return { asset1, asset2, spreadPct, limitP1, limitP2, leverage1, leverage2 };
+    return {
+      asset1,
+      asset2,
+      spreadPct,
+      limitP1,
+      limitP2,
+      leverage1: minLeverageFor(val, margin1),
+      leverage2: minLeverageFor(val, margin2),
+    };
   }, [sizeUSD, price1, price2, side1, side2, book, platform1, platform2, hlMargin, extMargin]);
 
   const fresh = lastUpdate && (Date.now() - lastUpdate.getTime()) < 6000;
@@ -345,8 +459,6 @@ export default function DeltaNeutralPage() {
     setFees(updated);
     saveFees(updated);
   };
-
-  const spreadAbs = calc?.spreadPct;
 
   return (
     <div className="px-4 pb-8 flex flex-col gap-4 pt-2">
@@ -362,10 +474,18 @@ export default function DeltaNeutralPage() {
         </div>
       </div>
 
+      {/* Wallets & API Keys */}
+      <WalletConfigPanel
+        hlAddress={hlAddress}
+        onHlChange={saveHlAddress}
+        extApiKey={extApiKey}
+        onExtChange={saveExtKey}
+      />
+
       {/* Config principale */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-4">
 
-        {/* Ligne 1 : Marché + Plateformes */}
+        {/* Marché + Plateformes */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Marché</label>
@@ -383,6 +503,7 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 1</label>
             <select
@@ -395,6 +516,7 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 2</label>
             <select
@@ -409,7 +531,7 @@ export default function DeltaNeutralPage() {
           </div>
         </div>
 
-        {/* Ligne 2 : Size + Step size */}
+        {/* Size + Step size toggle */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Taille de position (USD notionnel)</label>
@@ -422,30 +544,34 @@ export default function DeltaNeutralPage() {
             />
           </div>
           <div className="flex items-center gap-3 pb-2">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <div
-                onClick={() => setUseStepSize(s => !s)}
-                className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${useStepSize ? 'bg-blue-600' : 'bg-gray-600'}`}
-              >
-                <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${useStepSize ? 'translate-x-5' : 'translate-x-0'}`} />
-              </div>
-              <span className="text-xs text-gray-400">Arrondir au step size minimum</span>
-            </label>
+            <div
+              onClick={() => setUseStepSize(s => !s)}
+              className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 cursor-pointer ${
+                useStepSize ? 'bg-blue-600' : 'bg-gray-600'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                useStepSize ? 'translate-x-5' : 'translate-x-0'
+              }`} />
+            </div>
+            <span className="text-xs text-gray-400 cursor-pointer" onClick={() => setUseStepSize(s => !s)}>
+              Arrondir au step size minimum
+            </span>
           </div>
         </div>
 
-        {/* Spread indicator */}
-        {spreadAbs != null && (
+        {/* Spread */}
+        {calc?.spreadPct != null && (
           <div className={`rounded-lg px-3 py-2 text-xs flex items-center justify-between ${
-            Math.abs(spreadAbs) > 0.1
+            Math.abs(calc.spreadPct) > 0.1
               ? 'bg-yellow-900/30 border border-yellow-700'
               : 'bg-gray-900 border border-gray-700'
           }`}>
             <span className="text-gray-400">
               Écart de prix {plat1?.label} / {plat2?.label}
             </span>
-            <span className={`font-bold ${Math.abs(spreadAbs) > 0.1 ? 'text-yellow-400' : 'text-white'}`}>
-              {spreadAbs > 0 ? '+' : ''}{spreadAbs.toFixed(4)}%
+            <span className={`font-bold ${Math.abs(calc.spreadPct) > 0.1 ? 'text-yellow-400' : 'text-white'}`}>
+              {calc.spreadPct > 0 ? '+' : ''}{calc.spreadPct.toFixed(4)}%
             </span>
           </div>
         )}
@@ -489,7 +615,7 @@ export default function DeltaNeutralPage() {
           feesMaker={fees[platform1]?.maker ?? 0}
           feesTaker={fees[platform1]?.taker ?? 0}
           useStepSize={useStepSize}
-          stepSize={market?.stepSize ?? 0.001}
+          stepSize={getStepSize(marketId)}
         />
         <LegCard
           side={side2}
@@ -505,7 +631,7 @@ export default function DeltaNeutralPage() {
           feesMaker={fees[platform2]?.maker ?? 0}
           feesTaker={fees[platform2]?.taker ?? 0}
           useStepSize={useStepSize}
-          stepSize={market?.stepSize ?? 0.001}
+          stepSize={getStepSize(marketId)}
         />
       </div>
 
