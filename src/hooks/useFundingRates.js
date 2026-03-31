@@ -1,28 +1,72 @@
 import { useState, useEffect } from 'react';
+import { MARKETS } from './useLivePrices';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 
-async function fetchHLFundingRates() {
-  const res = await fetch(HL_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+// Récupère les funding rates natifs HL (crypto) + HIP-3 trade.xyz en parallèle
+async function fetchAllFundingRates() {
+  const [resNative, resXyz] = await Promise.all([
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+    }),
+    fetch(HL_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'metaAndAssetCtxs', dex: 'xyz' }),
+    }),
+  ]);
+
+  const [nativeData, xyzData] = await Promise.all([
+    resNative.json(),
+    resXyz.json(),
+  ]);
+
+  const rates = {};
+
+  // Perps natifs HL (crypto)
+  const [nativeMeta, nativeCtxs] = Array.isArray(nativeData) ? nativeData : [null, null];
+  (nativeMeta?.universe || []).forEach((asset, i) => {
+    const rate = parseFloat(nativeCtxs?.[i]?.funding ?? 0);
+    rates[asset.name] = rate;
   });
-  const [meta, ctxs] = await res.json();
-  const map = {};
-  (meta?.universe || []).forEach((asset, i) => {
-    map[asset.name] = parseFloat(ctxs?.[i]?.funding || 0);
+
+  // Marchés HIP-3 trade.xyz → clé préfixée "xyz:"
+  const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
+  (xyzMeta?.universe || []).forEach((asset, i) => {
+    const rate = parseFloat(xyzCtxs?.[i]?.funding ?? 0);
+    rates[asset.name] = rate; // asset.name est déjà "xyz:TSLA" etc.
   });
-  return map;
+
+  return rates;
 }
 
-async function fetchExtFundingRate(market) {
-  const res = await fetch(
-    `/api/extended?endpoint=${encodeURIComponent(`/info/${market}/funding`)}`
-  );
-  if (!res.ok) return 0;
-  const data = await res.json();
-  return parseFloat(data?.data?.fundingRate || 0);
+async function fetchExtFundingRate(extKey) {
+  if (!extKey) return null;
+  try {
+    const res = await fetch(
+      `/api/extended?endpoint=${encodeURIComponent(`/info/${extKey}/funding`)}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return parseFloat(data?.data?.fundingRate ?? null);
+  } catch {
+    return null;
+  }
+}
+
+// Retourne le funding rate pour un marché sur une plateforme donnée
+function getRateFromMap(rates, marketId, platformId) {
+  const market = MARKETS.find(m => m.id === marketId);
+  if (!market) return null;
+
+  if (['hyperliquid', 'xyz', 'hyena'].includes(platformId)) {
+    const key = market.hlKey;
+    if (!key) return null;
+    return rates[key] ?? null;
+  }
+  return null; // extended géré séparément via API
 }
 
 export function useFundingRates(marketId, platform1Id, platform2Id) {
@@ -31,54 +75,27 @@ export function useFundingRates(marketId, platform1Id, platform2Id) {
   useEffect(() => {
     if (!marketId || !platform1Id || !platform2Id) return;
 
-    const fetch = async () => {
+    const refresh = async () => {
       try {
-        const hlRates = await fetchHLFundingRates();
+        const market = MARKETS.find(m => m.id === marketId);
+        const hlRates = await fetchAllFundingRates();
 
-        const getRate = async (platformId) => {
-          if (platformId === 'hyperliquid') return hlRates['BTC'] !== undefined ? hlRates : null;
-          if (platformId === 'xyz')   return hlRates;
-          if (platformId === 'hyena') return hlRates;
-          if (platformId === 'extended') {
-            const { MARKETS } = await import('./useLivePrices');
-            const m = MARKETS.find(m => m.id === marketId);
-            if (!m) return 0;
-            return fetchExtFundingRate(m.extKey);
-          }
-          return 0;
-        };
+        const p1 = platform1Id === 'extended'
+          ? await fetchExtFundingRate(market?.extKey)
+          : getRateFromMap(hlRates, marketId, platform1Id);
 
-        const getRateForPlatform = (platformId, hlMap) => {
-          const { MARKETS } = require('./useLivePrices');
-          const m = MARKETS.find(m => m.id === marketId);
-          if (!m) return 0;
-          if (['hyperliquid', 'xyz', 'hyena'].includes(platformId)) {
-            return hlMap[m.hlKey] ?? 0;
-          }
-          return null;
-        };
+        const p2 = platform2Id === 'extended'
+          ? await fetchExtFundingRate(market?.extKey)
+          : getRateFromMap(hlRates, marketId, platform2Id);
 
-        const [p2rate] = await Promise.all([
-          platform2Id === 'extended'
-            ? (async () => {
-                const { MARKETS } = await import('./useLivePrices');
-                const m = MARKETS.find(m => m.id === marketId);
-                return m ? fetchExtFundingRate(m.extKey) : 0;
-              })()
-            : Promise.resolve(getRateForPlatform(platform2Id, hlRates)),
-        ]);
-
-        setRates({
-          p1: getRateForPlatform(platform1Id, hlRates),
-          p2: platform2Id === 'extended' ? p2rate : getRateForPlatform(platform2Id, hlRates),
-        });
+        setRates({ p1, p2 });
       } catch (e) {
         console.warn('useFundingRates error:', e.message);
       }
     };
 
-    fetch();
-    const t = setInterval(fetch, 60000); // refresh toutes les minutes
+    refresh();
+    const t = setInterval(refresh, 60000);
     return () => clearInterval(t);
   }, [marketId, platform1Id, platform2Id]);
 
