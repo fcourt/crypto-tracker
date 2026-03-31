@@ -31,13 +31,23 @@ const ORDER_TYPES = {
   ],
 };
 
+// Nonce aléatoire comme le SDK Python
+function generateNonce() {
+  return Math.floor(Math.random() * 2 ** 31);
+}
+
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
-  const nonce     = Date.now();
-  const expiresAt = Math.floor(nonce / 1000) + 3600;
-  const sizeStr   = order.size.toFixed(order.szDecimals ?? 6);
-  const priceStr  = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  const side      = order.isBuy ? 'BUY' : 'SELL';
+  const nonce      = generateNonce();
+  const expiresAt  = Math.floor(Date.now() / 1000) + 3600; // +1h en secondes
+  const sizeStr    = order.size.toFixed(order.szDecimals ?? 6);
+  const priceStr   = order.limitPrice.toFixed(order.pxDecimals ?? 2);
+  const side       = order.isBuy ? 'BUY' : 'SELL';
   const l2VaultInt = parseInt(l2Vault);
+
+  // Clé publique depuis la clé privée
+  const publicKey = '0x' + ec.starkCurve.getPublicKey(starkPrivateKey, false)
+    .slice(1, 33)  // coordonnée X uniquement
+    .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '');
 
   const message = {
     market:      order.extKey,
@@ -45,7 +55,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     type:        'LIMIT',
     size:        sizeStr,
     price:       priceStr,
-    timeInForce: 'GTC',
+    timeInForce: 'GTT',           // ✅ GTT (pas GTC)
     nonce:       nonce.toString(),
     expiresAt:   expiresAt.toString(),
     l2Vault:     l2VaultInt.toString(),
@@ -58,19 +68,22 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
+  // ✅ Structure correcte : settlement contient la signature
   const payload = {
     market:      order.extKey,
     side,
     type:        'LIMIT',
-    size:        sizeStr,
+    qty:         sizeStr,          // ✅ "qty" et non "size"
     price:       priceStr,
-    timeInForce: 'GTC',
+    timeInForce: 'GTT',
     nonce,
-    expiresAt,
-    l2Vault:     l2VaultInt,
-    signature: {
-      r: '0x' + r.toString(16).padStart(64, '0'),
-      s: '0x' + s.toString(16).padStart(64, '0'),
+    expiryEpochMillis: expiresAt * 1000,  // ✅ en millisecondes
+    settlement: {
+      publicKey,
+      signature: {
+        r: '0x' + r.toString(16).padStart(64, '0'),
+        s: '0x' + s.toString(16).padStart(64, '0'),
+      },
     },
   };
 
