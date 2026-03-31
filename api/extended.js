@@ -27,10 +27,11 @@ export default async function handler(req, res) {
       fetchOptions.body = JSON.stringify(req.body);
     }
 
-    const upstream = await fetch(
-      `https://api.starknet.extended.exchange/api/v1${endpoint}`,
-      fetchOptions
-    );
+    // Retirer /api/v1 du préfixe — l'endpoint le contient déjà
+const upstream = await fetch(
+  `https://api.starknet.extended.exchange${endpoint}`,
+  fetchOptions
+);
 
     const text = await upstream.text();
     let data;
