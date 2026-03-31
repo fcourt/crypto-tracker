@@ -130,42 +130,41 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
   const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
-  const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
-  const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
-  const extApiKey       = (() => {
-    try {
-      return JSON.parse(
-        localStorage.getItem('extended_api_keys') || '[]'
-      )[0]?.apiKey || '';
-    } catch { return ''; }
-  })();
 
-  const canTradeHL  = !!agentPrivateKey;
-  const canTradeExt = !!starkPrivateKey && !!l2Vault;
+  // ✅ canTrade calculé une fois (juste pour l'UI)
+  const starkPrivateKey = localStorage.getItem('ext_stark_pk')  || '';
+  const l2Vault         = localStorage.getItem('ext_l2_vault')  || '';
+  const canTradeHL      = !!agentPrivateKey;
+  const canTradeExt     = !!starkPrivateKey && !!l2Vault;
 
   const placeOrder = async (params) => {
-    const {
-      platformId, extKey, assetIndex,
-      isBuy, size, limitPrice, pxDecimals, szDecimals,
-    } = params;
+    // ✅ Toutes les clés relues à chaque appel, jamais en cache
+    const freshStarkPk  = localStorage.getItem('ext_stark_pk')   || '';
+    const freshL2Vault  = localStorage.getItem('ext_l2_vault')   || '';
+    const freshExtApiKey = (() => {
+      try {
+        return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
+      } catch { return ''; }
+    })();
+    const freshAgentPk      = localStorage.getItem('hl_agent_pk')      || '';
+    const freshVaultAddress = localStorage.getItem('hl_vault_address') || null;
+
+    const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
 
     if (platformId === 'extended') {
-      if (!canTradeExt) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
+      if (!freshStarkPk || !freshL2Vault) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
       return await placeExtendedOrder({
-        starkPrivateKey,
-        l2Vault,
-        extApiKey,
+        starkPrivateKey: freshStarkPk,
+        l2Vault:         freshL2Vault,
+        extApiKey:       freshExtApiKey,
         order: { extKey, isBuy, size, limitPrice, pxDecimals, szDecimals },
       });
     }
 
-    if (!canTradeHL) throw new Error('Clé privée agent HL manquante');
+    if (!freshAgentPk) throw new Error('Clé privée agent HL manquante');
 
-    const wallet   = privateKeyToAccount(agentPrivateKey);
-    const exchange = new ExchangeClient({
-      transport: new HttpTransport(),
-      wallet,
-    });
+    const wallet   = privateKeyToAccount(freshAgentPk);
+    const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
 
     const result = await exchange.order({
       orders: [{
@@ -177,12 +176,10 @@ export function usePlaceOrder() {
         t: { limit: { tif: 'Gtc' } },
       }],
       grouping:     'na',
-      vaultAddress: hlVaultAddress || undefined,
+      vaultAddress: freshVaultAddress || undefined,
     });
 
-    if (result?.status === 'err') {
-      throw new Error(result?.response ?? 'Erreur HL inconnue');
-    }
+    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
     return result;
   };
 
