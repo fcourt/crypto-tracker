@@ -5,7 +5,7 @@ const HL_API = 'https://api.hyperliquid.xyz/info';
 export const MARKETS = [
   // Crypto
   { id: 'BTC',       label: 'BTC',           hlKey: 'BTC',             extKey: 'BTC-USD',        category: 'Crypto' },
-  { id: 'ETH',       label: 'ETH',           hlKey: 'ETH',             extKey: 'ETH-USDT',        category: 'Crypto' },
+  { id: 'ETH',       label: 'ETH',           hlKey: 'ETH',             extKey: 'ETH-USD',        category: 'Crypto' },
   { id: 'SOL',       label: 'SOL',           hlKey: 'SOL',             extKey: 'SOL-USD',        category: 'Crypto' },
   // Indices
   { id: 'SP500',     label: 'S&P 500',       hlKey: 'xyz:SP500',       extKey: 'SPX500m-USD',    category: 'Indices' },
