@@ -107,6 +107,51 @@ function useOrderBook(hlKey) {
   return book;
 }
 
+function useOpenPositions(address) {
+  const [positions, setPositions] = useState([]);
+  const [loading,   setLoading]   = useState(false);
+
+  const load = async () => {
+    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+    setLoading(true);
+    try {
+      const res   = await fetch(HL_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+      });
+      const state = await res.json();
+      const parsed = (state?.assetPositions || [])
+        .filter(p => parseFloat(p.position?.szi) !== 0)
+        .map(p => {
+          const coin     = p.position.coin;
+          const szi      = parseFloat(p.position.szi);
+          const platform = coin.startsWith('xyz:')  ? 'xyz'
+                         : coin.startsWith('hyna:') ? 'hyena'
+                         : 'hyperliquid';
+          const market   = MARKETS.find(m => m.hlKey === coin);
+          return {
+            platform,
+            coin,
+            marketId:     market?.id ?? null,
+            label:        market?.label ?? coin,
+            side:         szi > 0 ? 'LONG' : 'SHORT',
+            szi:          Math.abs(szi),
+            entryPx:      parseFloat(p.position.entryPx || 0),
+            unrealizedPnl: parseFloat(p.position.unrealizedPnl || 0),
+          };
+        });
+      setPositions(parsed);
+    } catch (e) {
+      console.warn('useOpenPositions error:', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { positions, loading, load };
+}
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function PriceDot({ fresh }) {
@@ -210,6 +255,67 @@ function FeeConfigPanel({ fees, onChange }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PositionLoader({ address, onLoad, getPrice }) {
+  const { positions, loading, load } = useOpenPositions(address);
+  const [selected, setSelected] = useState('');
+
+  const handleSelect = (e) => {
+    const val = e.target.value;
+    setSelected(val);
+    if (!val) return;
+    const pos = positions.find((_, i) => String(i) === val);
+    if (!pos) return;
+    const currentPrice = getPrice(pos.marketId, pos.platform);
+    const sizeUSD      = currentPrice
+      ? (pos.szi * currentPrice).toFixed(2)
+      : (pos.szi * pos.entryPx).toFixed(2);
+    onLoad({ ...pos, sizeUSD });
+    setSelected(''); // reset après chargement
+  };
+
+  if (!address) return null;
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <button
+        onClick={load}
+        disabled={loading}
+        className="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors shrink-0"
+      >
+        {loading ? (
+          <span className="animate-spin">⟳</span>
+        ) : (
+          '📂'
+        )}
+        Charger mes positions
+      </button>
+
+      {positions.length > 0 && (
+        <select
+          value={selected}
+          onChange={handleSelect}
+          className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+        >
+          <option value="">Sélectionner une position...</option>
+          {positions.map((p, i) => (
+            <option key={i} value={String(i)}>
+              {p.side} {p.szi} {p.label} @ ${fmt(p.entryPx, 2)} — {
+                PLATFORMS.find(pl => pl.id === p.platform)?.label ?? p.platform
+              } {p.unrealizedPnl >= 0 ? '📈' : '📉'} {p.unrealizedPnl >= 0 ? '+' : ''}${fmt(p.unrealizedPnl, 2)}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {positions.length === 0 && !loading && (
+        <span className="text-xs text-gray-500 italic">
+          Cliquez pour charger les positions ouvertes
+        </span>
       )}
     </div>
   );
@@ -376,6 +482,12 @@ export default function DeltaNeutralPage() {
     saveExtendedApiKey(key, 'Delta Neutral');
   };
 
+  const handleLoadPosition = ({ marketId: mid, platform, sizeUSD: sz }) => {
+  if (mid) setMarketId(mid);
+  setPlatform1(platform);
+  setSizeUSD(sz);
+};
+
   const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
   const hlMargin  = useHLMargin(hlAddress);
@@ -461,6 +573,21 @@ export default function DeltaNeutralPage() {
         extApiKey={extApiKey}
         onExtChange={saveExtKey}
       />
+
+      {/* Position Loader */}
+{hlAddress && (
+  <div className="bg-gray-800 rounded-xl border border-gray-700 px-4 py-3">
+    <p className="text-xs text-gray-500 mb-2 font-medium">📊 Positions ouvertes (HL / trade.xyz / HyENA)</p>
+    <PositionLoader
+      address={hlAddress}
+      onLoad={handleLoadPosition}
+      getPrice={getPrice}
+    />
+    <p className="text-xs text-gray-600 mt-2">
+      Extended Exchange : récupération des positions non disponible via API
+    </p>
+  </div>
+)}
 
       {/* Config */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-4">
