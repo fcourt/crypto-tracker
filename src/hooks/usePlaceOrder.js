@@ -92,11 +92,24 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     }
   );
 
+ // const data = await res.json().catch(() => ({}));
+ // if (!res.ok || data?.status === 'ERROR') {
+ //   throw new Error(data?.error?.message || data?.message || `Extended HTTP ${res.status}`);
+ // }
+ // return data;
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.status === 'ERROR') {
-    throw new Error(data?.error?.message || data?.message || `Extended HTTP ${res.status}`);
+    // Log complet pour debug
+    console.error('Extended error response:', JSON.stringify(data, null, 2));
+    throw new Error(
+      data?.error?.message ||
+      data?.message ||
+      data?.error ||
+      JSON.stringify(data) ||
+      `Extended HTTP ${res.status}`
+    );
   }
-  return data;
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
