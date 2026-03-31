@@ -17,21 +17,15 @@ export default async function handler(req, res) {
     };
     if (apiKey) headers['X-Api-Key'] = apiKey;
 
-    // ── Transmettre le body pour les requêtes POST/PUT ──
-    const fetchOptions = {
-      method:  req.method,
-      headers,
-    };
-
+    const fetchOptions = { method: req.method, headers };
     if (req.method === 'POST' || req.method === 'PUT') {
       fetchOptions.body = JSON.stringify(req.body);
     }
 
-    // Retirer /api/v1 du préfixe — l'endpoint le contient déjà
-const upstream = await fetch(
-  `https://api.starknet.extended.exchange${endpoint}`,
-  fetchOptions
-);
+    // ── URL intelligente : évite le double /api/v1 ──
+    const BASE = 'https://api.starknet.extended.exchange';
+    const path = endpoint.startsWith('/api/') ? endpoint : `/api/v1${endpoint}`;
+    const upstream = await fetch(`${BASE}${path}`, fetchOptions);
 
     const text = await upstream.text();
     let data;
