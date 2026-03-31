@@ -325,14 +325,14 @@ function LegCard({
       {/* Fees */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-900 rounded-lg px-3 py-2">
-          <p className="text-gray-500 text-xs">Fees maker</p>
-          <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
-          <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Fees taker</p>
           <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
           <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
+        </div>
+        <div className="bg-gray-900 rounded-lg px-3 py-2">
+          <p className="text-gray-500 text-xs">Fees maker</p>
+          <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
+          <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
         </div>
       </div>
 
