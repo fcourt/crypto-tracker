@@ -117,7 +117,6 @@ function PriceDot({ fresh }) {
 
 function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
   const [open, setOpen] = useState(!hlAddress && !extApiKey);
-
   return (
     <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
       <button
@@ -137,7 +136,6 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
         </span>
         <span>{open ? '▲' : '▼'}</span>
       </button>
-
       {open && (
         <div className="px-4 pb-4 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
@@ -152,15 +150,10 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
                 placeholder="0x..."
                 className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
               />
-              {hlAddress && (
-                <span className="flex items-center text-xs text-green-400 px-2">✓</span>
-              )}
+              {hlAddress && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
             </div>
-            <p className="text-gray-600 text-xs">
-              Marge disponible sur HL, trade.xyz et HyENA
-            </p>
+            <p className="text-gray-600 text-xs">Marge disponible sur HL, trade.xyz et HyENA</p>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Clé API Extended Exchange</label>
             <div className="flex gap-2">
@@ -171,13 +164,9 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
                 placeholder="Votre clé API..."
                 className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
               />
-              {extApiKey && (
-                <span className="flex items-center text-xs text-green-400 px-2">✓</span>
-              )}
+              {extApiKey && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
             </div>
-            <p className="text-gray-600 text-xs">
-              Marge disponible et funding rates Extended
-            </p>
+            <p className="text-gray-600 text-xs">Marge disponible et funding rates Extended</p>
           </div>
         </div>
       )}
@@ -233,7 +222,6 @@ function LegCard({
   useStepSize, stepSize,
 }) {
   const isLong     = side === 'LONG';
-  // Long paie quand funding > 0, reçoit quand < 0. Inverse pour short.
   const fundingNet = fundingRate != null ? (isLong ? -fundingRate : fundingRate) : null;
   const receivePay = fundingNet == null ? null : fundingNet >= 0 ? 'reçoit' : 'paie';
 
@@ -259,9 +247,7 @@ function LegCard({
           </span>
           <span className="text-sm font-bold text-white">{platform?.label}</span>
         </div>
-        {isSuggested && (
-          <span className="text-xs text-yellow-400 font-medium">⭐ Optimal</span>
-        )}
+        {isSuggested && <span className="text-xs text-yellow-400 font-medium">⭐ Optimal</span>}
       </div>
 
       {/* Prix market + limit */}
@@ -284,7 +270,7 @@ function LegCard({
         </div>
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">
-            Size (asset){useStepSize ? <span className="text-blue-400 ml-1">step</span> : ''}
+            Size (asset){useStepSize && <span className="text-blue-400 ml-1">step</span>}
           </p>
           <p className="text-white font-bold">{sizeDisplay ? fmt(sizeDisplay, 6) : '—'}</p>
         </div>
@@ -301,9 +287,9 @@ function LegCard({
         <div className="bg-gray-900 rounded-lg px-3 py-2">
           <p className="text-gray-500 text-xs">Marge disponible</p>
           <p className={`font-bold ${
-            marginAvailable == null
-              ? 'text-gray-500'
-              : marginAvailable > 0 ? 'text-green-300' : 'text-red-400'
+            marginAvailable == null ? 'text-gray-500'
+            : marginAvailable > 0   ? 'text-green-300'
+            : 'text-red-400'
           }`}>
             {marginAvailable != null ? fmtUSD(marginAvailable) : '—'}
           </p>
@@ -391,9 +377,9 @@ export default function DeltaNeutralPage() {
   };
 
   const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
-  const fundingRates = useFundingRates(marketId, platform1, platform2, extApiKey);
-  const hlMargin     = useHLMargin(hlAddress);
-  const extMargin    = useExtMargin(extApiKey);
+  const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
+  const hlMargin  = useHLMargin(hlAddress);
+  const extMargin = useExtMargin(extApiKey);
 
   const market = MARKETS.find(m => m.id === marketId);
   const plat1  = PLATFORMS.find(p => p.id === platform1);
@@ -404,20 +390,16 @@ export default function DeltaNeutralPage() {
 
   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
-    if (platformId === 'hyena')    return null; // USDe — à implémenter
+    if (platformId === 'hyena')    return null;
     return hlMargin;
   };
 
-  // Suggestion direction : SHORT là où funding > 0 (on reçoit), LONG là où funding < 0
   const suggestion = useMemo(() => {
-    const r1 = fundingRates.p1;
-    const r2 = fundingRates.p2;
-    if (r1 == null || r2 == null) return null;
-    // On préfère être LONG sur la plateforme avec le funding le plus bas
-    return r1 <= r2
+    if (fundingP1 == null || fundingP2 == null) return null;
+    return fundingP1 <= fundingP2
       ? { p1: 'LONG', p2: 'SHORT' }
       : { p1: 'SHORT', p2: 'LONG' };
-  }, [fundingRates]);
+  }, [fundingP1, fundingP2]);
 
   const side1 = suggestion?.p1 ?? 'LONG';
   const side2 = suggestion?.p2 ?? 'SHORT';
@@ -429,17 +411,23 @@ export default function DeltaNeutralPage() {
     const asset1    = val / price1;
     const asset2    = val / price2;
     const spreadPct = ((price1 - price2) / price2) * 100;
-
     const fallback  = 0.0005;
-    const limitP1   = side1 === 'LONG'
-      ? (book.ask ?? price1 * (1 - fallback))
-      : (book.bid ?? price1 * (1 + fallback));
-    const limitP2   = side2 === 'LONG'
-      ? price2 * (1 - fallback)
-      : price2 * (1 + fallback);
 
-    const margin1   = getMarginForPlatform(platform1);
-    const margin2   = getMarginForPlatform(platform2);
+    const limitP1 = platform1 === 'extended'
+      ? (side1 === 'LONG'
+          ? (extAsk ?? price1 * (1 - fallback))
+          : (extBid ?? price1 * (1 + fallback)))
+      : (side1 === 'LONG'
+          ? (book.ask ?? price1 * (1 - fallback))
+          : (book.bid ?? price1 * (1 + fallback)));
+
+    const limitP2 = platform2 === 'extended'
+      ? (side2 === 'LONG'
+          ? (extAsk ?? price2 * (1 - fallback))
+          : (extBid ?? price2 * (1 + fallback)))
+      : (side2 === 'LONG'
+          ? (price2 * (1 - fallback))
+          : (price2 * (1 + fallback)));
 
     return {
       asset1,
@@ -447,10 +435,10 @@ export default function DeltaNeutralPage() {
       spreadPct,
       limitP1,
       limitP2,
-      leverage1: minLeverageFor(val, margin1),
-      leverage2: minLeverageFor(val, margin2),
+      leverage1: minLeverageFor(val, getMarginForPlatform(platform1)),
+      leverage2: minLeverageFor(val, getMarginForPlatform(platform2)),
     };
-  }, [sizeUSD, price1, price2, side1, side2, book, platform1, platform2, hlMargin, extMargin]);
+  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, hlMargin, extMargin]);
 
   const fresh = lastUpdate && (Date.now() - lastUpdate.getTime()) < 6000;
 
@@ -474,7 +462,7 @@ export default function DeltaNeutralPage() {
         </div>
       </div>
 
-      {/* Wallets & API Keys */}
+      {/* Wallets */}
       <WalletConfigPanel
         hlAddress={hlAddress}
         onHlChange={saveHlAddress}
@@ -482,7 +470,7 @@ export default function DeltaNeutralPage() {
         onExtChange={saveExtKey}
       />
 
-      {/* Config principale */}
+      {/* Config */}
       <div className="bg-gray-800 rounded-xl border border-gray-700 p-4 flex flex-col gap-4">
 
         {/* Marché + Plateformes */}
@@ -503,7 +491,6 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 1</label>
             <select
@@ -516,7 +503,6 @@ export default function DeltaNeutralPage() {
               ))}
             </select>
           </div>
-
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Plateforme 2</label>
             <select
@@ -531,7 +517,7 @@ export default function DeltaNeutralPage() {
           </div>
         </div>
 
-        {/* Size + Step size toggle */}
+        {/* Size + Step size */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Taille de position (USD notionnel)</label>
@@ -554,7 +540,10 @@ export default function DeltaNeutralPage() {
                 useStepSize ? 'translate-x-5' : 'translate-x-0'
               }`} />
             </div>
-            <span className="text-xs text-gray-400 cursor-pointer" onClick={() => setUseStepSize(s => !s)}>
+            <span
+              className="text-xs text-gray-400 cursor-pointer"
+              onClick={() => setUseStepSize(s => !s)}
+            >
               Arrondir au step size minimum
             </span>
           </div>
@@ -585,10 +574,10 @@ export default function DeltaNeutralPage() {
               {' · '}
               <span className="text-red-400 font-medium">{plat2?.label} → {suggestion.p2}</span>
               {' · '}
-              {fundingRates.p1 != null && fundingRates.p2 != null && (
+              {fundingP1 != null && fundingP2 != null && (
                 <span className="text-gray-500">
-                  Différentiel : {fmtPct(Math.abs(fundingRates.p1 - fundingRates.p2))} /h
-                  {' '}({fmtPct(Math.abs(fundingRates.p1 - fundingRates.p2) * 24 * 365)} /an)
+                  Différentiel : {fmtPct(Math.abs(fundingP1 - fundingP2))} /h
+                  {' '}({fmtPct(Math.abs(fundingP1 - fundingP2) * 24 * 365)} /an)
                 </span>
               )}
             </p>
@@ -596,7 +585,7 @@ export default function DeltaNeutralPage() {
         )}
       </div>
 
-      {/* Fee config */}
+      {/* Fees config */}
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
       {/* LegCards */}
@@ -610,10 +599,10 @@ export default function DeltaNeutralPage() {
           sizeUSD={parseFloat(sizeUSD) || null}
           sizeAsset={calc?.asset1}
           marginAvailable={getMarginForPlatform(platform1)}
-          fundingRate={fundingRates.p1}
+          fundingRate={fundingP1}
           isSuggested={!!suggestion}
-          feesMaker={fees[platform1]?.maker ?? 0}
           feesTaker={fees[platform1]?.taker ?? 0}
+          feesMaker={fees[platform1]?.maker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
         />
@@ -626,10 +615,10 @@ export default function DeltaNeutralPage() {
           sizeUSD={parseFloat(sizeUSD) || null}
           sizeAsset={calc?.asset2}
           marginAvailable={getMarginForPlatform(platform2)}
-          fundingRate={fundingRates.p2}
+          fundingRate={fundingP2}
           isSuggested={!!suggestion}
-          feesMaker={fees[platform2]?.maker ?? 0}
           feesTaker={fees[platform2]?.taker ?? 0}
+          feesMaker={fees[platform2]?.maker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
         />
