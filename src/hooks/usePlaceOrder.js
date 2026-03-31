@@ -37,6 +37,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const sizeStr   = order.size.toFixed(order.szDecimals ?? 6);
   const priceStr  = order.limitPrice.toFixed(order.pxDecimals ?? 2);
   const side      = order.isBuy ? 'BUY' : 'SELL';
+  const l2VaultInt = parseInt(l2Vault);
 
   const message = {
     market:      order.extKey,
@@ -47,12 +48,12 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     timeInForce: 'GTC',
     nonce:       nonce.toString(),
     expiresAt:   expiresAt.toString(),
-    l2Vault:     l2Vault.toString(),
+    l2Vault:     l2VaultInt.toString(),
   };
 
   const msgHash = typedData.getMessageHash(
     { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    stark.makeAddress(l2Vault.toString())
+    stark.makeAddress(l2VaultInt.toString())
   );
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
@@ -66,17 +67,17 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     timeInForce: 'GTC',
     nonce,
     expiresAt,
-    l2Vault:     parseInt(l2Vault),
+    l2Vault:     l2VaultInt,
     signature: {
-      r: '0x' + r.toString(16),
-      s: '0x' + s.toString(16),
+      r: '0x' + r.toString(16).padStart(64, '0'),
+      s: '0x' + s.toString(16).padStart(64, '0'),
     },
   };
 
   const res = await fetch(
-  `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/orders')}`,
+    `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/orders')}`,
     {
-      method:  'PUT',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
@@ -89,7 +90,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   console.log('Extended raw response:', res.status, rawText);
 
   let data = {};
-  try { data = JSON.parse(rawText); } catch { /* réponse non-JSON */ }
+  try { data = JSON.parse(rawText); } catch { /* non-JSON */ }
 
   if (!res.ok || data?.status === 'ERROR') {
     throw new Error(
