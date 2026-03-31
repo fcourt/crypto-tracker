@@ -31,59 +31,70 @@ const ORDER_TYPES = {
   ],
 };
 
-// Nonce aléatoire comme le SDK Python
 function generateNonce() {
-  return Math.floor(Math.random() * 2 ** 31);
+  return Math.floor(Math.random() * (2 ** 31 - 1)) + 1; // ≥1 et ≤2^31
+}
+
+function generateOrderId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
 }
 
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
-  const nonce      = generateNonce();
-  const expiresAt  = Math.floor(Date.now() / 1000) + 3600; // +1h en secondes
-  const sizeStr    = order.size.toFixed(order.szDecimals ?? 6);
-  const priceStr   = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  const side       = order.isBuy ? 'BUY' : 'SELL';
-  const l2VaultInt = parseInt(l2Vault);
+  const nonce            = generateNonce();
+  const expiryEpochMillis = Date.now() + 3600 * 1000; // +1h en ms
+  const sizeStr          = order.size.toFixed(order.szDecimals ?? 6);
+  const priceStr         = order.limitPrice.toFixed(order.pxDecimals ?? 2);
+  const side             = order.isBuy ? 'BUY' : 'SELL';
+  const l2VaultStr       = l2Vault.toString();
 
-  // Clé publique depuis la clé privée
-  const publicKey = '0x' + ec.starkCurve.getPublicKey(starkPrivateKey, false)
-    .slice(1, 33)  // coordonnée X uniquement
-    .reduce((s, b) => s + b.toString(16).padStart(2, '0'), '');
+  // Clé publique Stark depuis la clé privée
+  const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
+  const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 
+  // Message SNIP-12 à signer
   const message = {
     market:      order.extKey,
     side,
     type:        'LIMIT',
     size:        sizeStr,
     price:       priceStr,
-    timeInForce: 'GTT',           // ✅ GTT (pas GTC)
+    timeInForce: 'GTT',
     nonce:       nonce.toString(),
-    expiresAt:   expiresAt.toString(),
-    l2Vault:     l2VaultInt.toString(),
+    expiresAt:   Math.floor(expiryEpochMillis / 1000).toString(), // secondes pour la signature
+    l2Vault:     l2VaultStr,
   };
 
   const msgHash = typedData.getMessageHash(
     { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    stark.makeAddress(l2VaultInt.toString())
+    stark.makeAddress(l2VaultStr)
   );
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
-  // ✅ Structure correcte : settlement contient la signature
+  // Payload selon la doc exacte
   const payload = {
-    market:      order.extKey,
+    id:                generateOrderId(),
+    market:            order.extKey,       // ex: "BTC-USDT"
+    type:              'LIMIT',
     side,
-    type:        'LIMIT',
-    qty:         sizeStr,          // ✅ "qty" et non "size"
-    price:       priceStr,
-    timeInForce: 'GTT',
-    nonce,
-    expiryEpochMillis: expiresAt * 1000,  // ✅ en millisecondes
+    qty:               sizeStr,
+    price:             priceStr,
+    timeInForce:       'GTT',
+    expiryEpochMillis,
+    fee:               '0.0005',           // taker fee par défaut
+    nonce:             nonce.toString(),
     settlement: {
-      publicKey,
       signature: {
         r: '0x' + r.toString(16).padStart(64, '0'),
         s: '0x' + s.toString(16).padStart(64, '0'),
       },
+      starkKey,
+      collateralPosition: l2VaultStr,
     },
   };
 
