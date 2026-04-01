@@ -117,6 +117,13 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   },
 };
 
+console.log('=== Extended Order Debug ===');
+console.log('message signé:', JSON.stringify(message, null, 2));
+console.log('payload envoyé:', JSON.stringify(payload, null, 2));
+console.log('starkKey:', starkKey);
+console.log('l2Vault:', l2VaultStr);
+console.log('msgHash:', msgHash);
+  
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
     {
