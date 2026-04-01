@@ -51,28 +51,35 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const szDecimals = order.szDecimals ?? 2;
   const pxDecimals = order.pxDecimals ?? 2;
   const sizeStr    = order.size.toFixed(szDecimals);
-  const priceStr   = order.limitPrice.toFixed(pxDecimals);
+  //const priceStr   = order.limitPrice.toFixed(pxDecimals);
+  const priceStr = aggressivePrice.toFixed(pxDecimals);
   const side              = order.isBuy ? 'BUY' : 'SELL';
   const l2VaultStr        = l2Vault.toString();
 
   const orderType     = order.orderType ?? 'maker';
   const isMarket      = orderType === 'taker';
   const timeInForce   = isMarket ? 'IOC' : 'GTT';
-  const type          = isMarket ? 'MARKET' : 'LIMIT';
-
+  const type        = 'LIMIT'; 
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
+  const aggressivePrice = isMarket
+  ? (order.isBuy
+      ? order.limitPrice * 1.0075
+      : order.limitPrice * 0.9925)
+  : order.limitPrice;
+
+
   // ✅ message signé = ce qu'on envoie réellement
 const message = {
   market:      order.extKey,
   side,
-  type,                          // ✅ 'LIMIT' ou 'MARKET' selon orderType
+  type:        'LIMIT',     // ✅ toujours LIMIT
   size:        sizeStr,
-  price:       isMarket ? '0' : priceStr, // ✅ '0' pour market (champ obligatoire dans la signature)
-  timeInForce,                   // ✅ 'GTT' ou 'IOC' selon orderType
+  price:       priceStr,    // ✅ prix agressif si taker
+  timeInForce,              // ✅ GTT ou IOC
   nonce:       nonce.toString(),
   expiresAt:   expiryEpochMillis.toString(),
   l2Vault:     l2VaultStr,
@@ -86,26 +93,27 @@ const message = {
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
   const payload = {
-    id:                generateOrderId(),
-    market:            order.extKey,
-    type,                          // ✅ 'LIMIT' ou 'MARKET'
-    side,
-    qty:               sizeStr,
-    //price:             isMarket ? undefined : priceStr, // ✅ pas de price en market
-    price: isMarket ? '0' : priceStr,
-    timeInForce,                   // ✅ 'GTT' ou 'IOC'
-    expiryEpochMillis: isMarket ? undefined : expiryEpochMillis,
-    fee:               '0.0005',
-    nonce:             nonce.toString(),
-      settlement: {
-        signature: {
-          r: '0x' + r.toString(16).padStart(64, '0'),
-          s: '0x' + s.toString(16).padStart(64, '0'),
-        },
-      starkKey,
-      collateralPosition: l2VaultStr,
+  id:                         generateOrderId(),
+  market:                     order.extKey,
+  type:                       'LIMIT',
+  side,
+  qty:                        sizeStr,
+  price:                      priceStr,             // ✅ toujours présent
+  timeInForce,
+  expiryEpochMillis,                                // ✅ toujours présent
+  fee:                        '0.0005',
+  nonce:                      nonce.toString(),
+  selfTradeProtectionLevel:   'ACCOUNT',            // ✅ ajout doc
+  ...(order.reduceOnly && { reduceOnly: true }),    // ✅ pour fermeture
+  settlement: {
+    signature: {
+      r: '0x' + r.toString(16).padStart(64, '0'),
+      s: '0x' + s.toString(16).padStart(64, '0'),
     },
-  };
+    starkKey,
+    collateralPosition: l2VaultStr,
+  },
+};
 
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
