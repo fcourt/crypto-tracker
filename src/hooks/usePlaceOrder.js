@@ -50,8 +50,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const expiryEpochMillis = Date.now() + 3600 * 1000;
   // const sizeStr           = order.size.toFixed(order.szDecimals ?? 6);
   // const priceStr          = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  // ✅ Précisions réelles du marché
-  const { szDecimals, pxDecimals } = await getMarketPrecision(order.extKey, extApiKey);
+  
   const sizeStr  = order.size.toFixed(szDecimals);
 const priceStr = order.limitPrice.toFixed(pxDecimals);
   const side              = order.isBuy ? 'BUY' : 'SELL';
@@ -130,22 +129,6 @@ const priceStr = order.limitPrice.toFixed(pxDecimals);
     );
   }
   return data;
-}
-
-// Récupère les précisions du marché depuis l'API Extended
-async function getMarketPrecision(extKey, extApiKey) {
-  const res = await fetch(
-    `/api/extended?endpoint=${encodeURIComponent('/api/v1/public/instruments')}`,
-    { headers: { 'User-Agent': 'TrekApp/1.0' } }
-  );
-  const data = await res.json();
-  console.log('instruments sample:', data?.data?.[0]); // 👈 à ajouter
-  const market = data?.data?.find(m => m.symbol === extKey);
-  if (!market) throw new Error(`Marché introuvable : ${extKey}`);
-  return {
-    szDecimals: market.quantityPrecision,
-    pxDecimals: market.pricePrecision,
-  };
 }
 
 // Hook public — exporté
