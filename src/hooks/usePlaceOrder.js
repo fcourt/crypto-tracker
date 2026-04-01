@@ -2,7 +2,7 @@
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ec, hash, number } from 'starknet';
+import { ec, hash } from 'starknet';
 
 const L2_CONFIGS = {
   'BTC-USD': { syntheticId: '0x4254432d3600000000000000000000', syntheticResolution: 1000000, collateralResolution: 1000000, szDecimals: 5, pxDecimals: 1 },
@@ -11,33 +11,6 @@ const L2_CONFIGS = {
 };
 
 const EXT_API_BASE = '/api/extended';
-
-const STARKNET_DOMAIN = {
-  name:     'Perpetuals',
-  version:  'v0',
-  chainId:  'SN_MAIN',
-  revision: '1',
-};
-
-const ORDER_TYPES = {
-  StarknetDomain: [
-    { name: 'name',     type: 'shortstring' },
-    { name: 'version',  type: 'shortstring' },
-    { name: 'chainId',  type: 'shortstring' },
-    { name: 'revision', type: 'shortstring' },
-  ],
-  Order: [
-    { name: 'market',      type: 'shortstring' },
-    { name: 'side',        type: 'shortstring' },
-    { name: 'type',        type: 'shortstring' },
-    { name: 'size',        type: 'shortstring' },
-    { name: 'price',       type: 'shortstring' },
-    { name: 'timeInForce', type: 'shortstring' },
-    { name: 'nonce',       type: 'felt'        },
-    { name: 'expiresAt',   type: 'felt'        },
-    { name: 'l2Vault',     type: 'felt'        },
-  ],
-};
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -162,74 +135,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   return data;
 }
   
-  const msgHash = typedData.getMessageHash(
-    { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    starkKey
-  );
-
-  const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
-
-  const payload = {
-  id:                         generateOrderId(),
-  market:                     order.extKey,
-  type:                       'LIMIT',
-  side,
-  qty:                        sizeStr,
-  price:                      priceStr,             // ✅ toujours présent
-  timeInForce,
-  expiryEpochMillis,                                // ✅ toujours présent
-  fee:                        '0.0005',
-  nonce:                      nonce.toString(),
-  selfTradeProtectionLevel:   'ACCOUNT',            // ✅ ajout doc
-  ...(order.reduceOnly && { reduceOnly: true }),    // ✅ pour fermeture
-  settlement: {
-    signature: {
-      r: '0x' + r.toString(16).padStart(64, '0'),
-      s: '0x' + s.toString(16).padStart(64, '0'),
-    },
-    starkKey,
-    collateralPosition: l2VaultStr,
-  },
-};
-
-console.log('=== Extended Order Debug ===');
-console.log('message signé:', JSON.stringify(message, null, 2));
-console.log('payload envoyé:', JSON.stringify(payload, null, 2));
-console.log('starkKey:', starkKey);
-console.log('l2Vault:', l2VaultStr);
-console.log('msgHash:', msgHash);
-console.log('size brute:', order.size, '| szDecimals:', szDecimals, '| sizeStr:', sizeStr);
   
-  const res = await fetch(
-    `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Api-Key':    extApiKey,
-        'User-Agent':   'TrekApp/1.0',
-      },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  const rawText = await res.text();
-  console.log('Extended raw response:', res.status, rawText);
-
-  let data = {};
-  try { data = JSON.parse(rawText); } catch { /* non-JSON */ }
-
-  if (!res.ok || data?.status === 'ERROR') {
-    throw new Error(
-      data?.error?.message ||
-      data?.message ||
-      rawText ||
-      `Extended HTTP ${res.status}`
-    );
-  }
-  return data;
-}
-
 // Hook public — exporté
 export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
@@ -259,7 +165,7 @@ export function usePlaceOrder() {
         l2Vault:         freshL2Vault,
         extApiKey:       freshExtApiKey,
         order: {
-          extKey, isBuy, size, limitPrice, pxDecimals, szDecimals,
+          extKey, isBuy, size, limitPrice,
           orderType: params.orderType ?? 'maker',
           reduceOnly: params.reduceOnly ?? false,  // ✅ ajouter
           },
