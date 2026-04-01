@@ -70,7 +70,36 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   // ✅ Hash StarkEx perpetual — instruction type 3
   const LIMIT_ORDER_WITH_FEES = 3n;
-  const msgHash = hash.computeHashOnElements([
+  const msgHash = hash.// ✅ Hash StarkEx perpetual — structure packed correcte
+const PERPETUAL_LIMIT_ORDER_WITH_FEES = 3n;
+
+// packed_msg0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
+const packed0 =
+  (amountSell  << 160n) |
+  (amountBuy   <<  96n) |
+  (feeAmount   <<  32n) |
+  BigInt(nonce);
+
+// packed_msg1 : type(10) | vault(64) | vault(64) | vault(64) | expiry(32)
+const packed1 =
+  (PERPETUAL_LIMIT_ORDER_WITH_FEES << 245n) |
+  (BigInt(l2Vault) << 181n) |
+  (BigInt(l2Vault) << 117n) |
+  (BigInt(l2Vault) <<  85n) |
+  expirationSecs;
+
+// Pedersen hash chain : H(H(H(H(asset_sell, asset_buy), asset_fee), packed0), packed1)
+const { pedersen } = hash;
+const msgHash = pedersen(
+  pedersen(
+    pedersen(
+      pedersen(BigInt(assetIdSell), BigInt(assetIdBuy)),
+      BigInt('0x1')  // asset_id_fee = collateral
+    ),
+    packed0
+  ),
+  packed1
+);([
   LIMIT_ORDER_WITH_FEES,
   BigInt(assetIdSell),
   BigInt(assetIdBuy),
