@@ -23,7 +23,6 @@ function generateOrderId() {
   });
 }
 
-// Fonction privée — non exportée
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
@@ -32,7 +31,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const isMarket    = orderType === 'taker';
   const timeInForce = isMarket ? 'IOC' : 'GTT';
 
-  // L2 config pour ce market
   const l2Config = L2_CONFIGS[order.extKey];
   if (!l2Config) throw new Error(`L2 config inconnue pour ${order.extKey}`);
 
@@ -52,65 +50,41 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  // ✅ Montants L2 internes
   const baseAmount  = BigInt(Math.round(parseFloat(sizeStr)  * syntheticResolution));
   const quoteAmount = BigInt(Math.round(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution));
   const feeAmount   = BigInt(Math.ceil(Number(quoteAmount) * 0.0005));
 
-  // Sens : SELL synthetic → vend base, reçoit quote
   const assetIdSell = isBuy ? '0x1'       : syntheticId;
   const assetIdBuy  = isBuy ? syntheticId : '0x1';
   const amountSell  = isBuy ? quoteAmount : baseAmount;
   const amountBuy   = isBuy ? baseAmount  : quoteAmount;
 
-  // Expiration en heures (arrondi sup)
-  //const expirationHours = BigInt(Math.ceil(expiryEpochMillis / 1000 / 3600));
-  const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // 1 209 600s
+  const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600;
   const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
-  // ✅ Hash StarkEx perpetual — instruction type 3
-  const LIMIT_ORDER_WITH_FEES = 3n;
-  const msgHash = hash.// ✅ Hash StarkEx perpetual — structure packed correcte
-const PERPETUAL_LIMIT_ORDER_WITH_FEES = 3n;
+  const packed0 =
+    (amountSell  << 160n) |
+    (amountBuy   <<  96n) |
+    (feeAmount   <<  32n) |
+    BigInt(nonce);
 
-// packed_msg0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
-const packed0 =
-  (amountSell  << 160n) |
-  (amountBuy   <<  96n) |
-  (feeAmount   <<  32n) |
-  BigInt(nonce);
+  const packed1 =
+    (3n              << 245n) |
+    (BigInt(l2Vault) << 181n) |
+    (BigInt(l2Vault) << 117n) |
+    (BigInt(l2Vault) <<  85n) |
+    expirationSecs;
 
-// packed_msg1 : type(10) | vault(64) | vault(64) | vault(64) | expiry(32)
-const packed1 =
-  (PERPETUAL_LIMIT_ORDER_WITH_FEES << 245n) |
-  (BigInt(l2Vault) << 181n) |
-  (BigInt(l2Vault) << 117n) |
-  (BigInt(l2Vault) <<  85n) |
-  expirationSecs;
-
-// Pedersen hash chain : H(H(H(H(asset_sell, asset_buy), asset_fee), packed0), packed1)
-const { pedersen } = hash;
-const msgHash = pedersen(
-  pedersen(
-    pedersen(
-      pedersen(BigInt(assetIdSell), BigInt(assetIdBuy)),
-      BigInt('0x1')  // asset_id_fee = collateral
+  const msgHash = hash.pedersen(
+    hash.pedersen(
+      hash.pedersen(
+        hash.pedersen(BigInt(assetIdSell), BigInt(assetIdBuy)),
+        1n
+      ),
+      packed0
     ),
-    packed0
-  ),
-  packed1
-);([
-  LIMIT_ORDER_WITH_FEES,
-  BigInt(assetIdSell),
-  BigInt(assetIdBuy),
-  amountSell,
-  amountBuy,
-  feeAmount,
-  BigInt(l2Vault),   // vault_sold (positionId)
-  BigInt(l2Vault),   // vault_bought (même valeur pour perps)
-  BigInt(nonce),
-  expirationSecs,
-]);
+    packed1
+  );
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
@@ -139,8 +113,9 @@ const msgHash = pedersen(
 
   console.log('=== Extended Order Debug ===');
   console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', quoteAmount.toString(), '| feeAmount:', feeAmount.toString());
+  console.log('expirationSecs:', expirationSecs.toString());
   console.log('msgHash:', msgHash);
-  console.log('payload envoyé:', JSON.stringify(payload, null, 2));
+  console.log('payload:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
@@ -166,9 +141,7 @@ const msgHash = pedersen(
   }
   return data;
 }
-  
-  
-// Hook public — exporté
+
 export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
   const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
@@ -178,8 +151,8 @@ export function usePlaceOrder() {
   const canTradeExt     = !!starkPrivateKey && !!l2Vault;
 
   const placeOrder = async (params) => {
-    const freshStarkPk  = localStorage.getItem('ext_stark_pk')  || '';
-    const freshL2Vault  = localStorage.getItem('ext_l2_vault')  || '';
+    const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
+    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || '';
     const freshExtApiKey = (() => {
       try {
         return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
@@ -198,9 +171,9 @@ export function usePlaceOrder() {
         extApiKey:       freshExtApiKey,
         order: {
           extKey, isBuy, size, limitPrice,
-          orderType: params.orderType ?? 'maker',
-          reduceOnly: params.reduceOnly ?? false,  // ✅ ajouter
-          },
+          orderType:  params.orderType  ?? 'maker',
+          reduceOnly: params.reduceOnly ?? false,
+        },
       });
     }
 
@@ -211,18 +184,18 @@ export function usePlaceOrder() {
 
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-const result = await exchange.order({
-  orders: [{
-    a: assetIndex,
-    b: isBuy,
-    p: limitPrice.toFixed(pxDecimals ?? 2),
-    s: size.toFixed(szDecimals ?? 6),
-    r: false,
-    t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } }, // ✅
-  }],
-  grouping:     'na',
-  vaultAddress: freshVaultAddress || undefined,
-});
+    const result = await exchange.order({
+      orders: [{
+        a: assetIndex,
+        b: isBuy,
+        p: limitPrice.toFixed(pxDecimals ?? 2),
+        s: size.toFixed(szDecimals ?? 6),
+        r: false,
+        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+      }],
+      grouping:     'na',
+      vaultAddress: freshVaultAddress || undefined,
+    });
 
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
     return result;
