@@ -636,6 +636,8 @@ export default function DeltaNeutralPage() {
   const [useStepSize, setUseStepSize] = useState(false);
   const [fees,        setFees]        = useState(loadFees);
   
+  //const { getPrice, getStepSize, getExtPrecision } = useLivePrices();
+  const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
   const { getAssetMeta } = useHLMeta();
 
   const [hlAddress, setHlAddress] = useState(
@@ -677,22 +679,29 @@ const canTradePlatform = (platformId) => {
 };
 
 const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => {
-  // Résolution dynamique de l'index et des décimales
-  const hlKey    = market?.hlKey;
-  const meta     = getAssetMeta(hlKey);       // { index, szDecimals, pxDecimals }
+  const hlKey = market?.hlKey;
+  const meta  = getAssetMeta(hlKey);
+
+  // ✅ Précisions selon la plateforme
+  const szDecimals = platformId === 'extended'
+    ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
+    : (meta?.szDecimals ?? 6);
+  const pxDecimals = platformId === 'extended'
+    ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
+    : (meta?.pxDecimals ?? 2);
 
   return {
     platformId,
     hlKey,
-    extKey:      market?.extKey,
-    assetIndex:  meta?.index    ?? 0,         // ← résolu dynamiquement ✅
-    isBuy:       side === 'LONG',
-    size:        useStepSize && getStepSize(marketId)
+    extKey:     market?.extKey,
+    assetIndex: meta?.index ?? 0,
+    isBuy:      side === 'LONG',
+    size: useStepSize && getStepSize(marketId)
       ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
       : sizeAsset,
     limitPrice,
-    pxDecimals:  meta?.pxDecimals ?? 2,       // ← résolu dynamiquement ✅
-    szDecimals:  meta?.szDecimals ?? 6,       // ← résolu dynamiquement ✅
+    szDecimals,
+    pxDecimals,
   };
 };
 
@@ -733,7 +742,7 @@ const handlePlaceBothLegs = async () => {
   }
 };
 
-  const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
+  //const { getPrice, getStepSize, lastUpdate } = useLivePrices(3000);
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
   const hlMargin  = useHLMargin(hlAddress);
   const extMargin = useExtMargin(extApiKey);
