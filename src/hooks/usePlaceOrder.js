@@ -75,10 +75,10 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     (BigInt(l2Vault) <<  85n) |
     expirationSecs;
 
-  const msgHash = hash.pedersen(
-    hash.pedersen(
-      hash.pedersen(
-        hash.pedersen(BigInt(assetIdSell), BigInt(assetIdBuy)),
+    const msgHash = hash.computePedersenHash(
+    hash.computePedersenHash(
+      hash.computePedersenHash(
+        hash.computePedersenHash(BigInt(assetIdSell), BigInt(assetIdBuy)),
         1n
       ),
       packed0
