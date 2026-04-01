@@ -65,17 +65,18 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  const message = {
-    market:      order.extKey,
-    side,
-    type:        'LIMIT',
-    size:        sizeStr,
-    price:       priceStr,
-    timeInForce: 'GTT',
-    nonce:       nonce.toString(),
-    expiresAt:   expiryEpochMillis.toString(),
-    l2Vault:     l2VaultStr,
-  };
+  // ✅ message signé = ce qu'on envoie réellement
+const message = {
+  market:      order.extKey,
+  side,
+  type,                          // ✅ 'LIMIT' ou 'MARKET' selon orderType
+  size:        sizeStr,
+  price:       isMarket ? '0' : priceStr, // ✅ '0' pour market (champ obligatoire dans la signature)
+  timeInForce,                   // ✅ 'GTT' ou 'IOC' selon orderType
+  nonce:       nonce.toString(),
+  expiresAt:   expiryEpochMillis.toString(),
+  l2Vault:     l2VaultStr,
+};
 
   const msgHash = typedData.getMessageHash(
     { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
