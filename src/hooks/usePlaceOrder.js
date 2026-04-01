@@ -65,8 +65,8 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   // Expiration en heures (arrondi sup)
   //const expirationHours = BigInt(Math.ceil(expiryEpochMillis / 1000 / 3600));
-  const SERVER_CLOCK_OFFSET_MS = 14 * 24 * 3600 * 1000; // +14 jours
-  const expirationHours = BigInt(Math.ceil((expiryEpochMillis + SERVER_CLOCK_OFFSET_MS) / 1000 / 3600));
+  const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // 1 209 600s
+  const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
   // ✅ Hash StarkEx perpetual — instruction type 3
   const LIMIT_ORDER_WITH_FEES = 3n;
@@ -79,7 +79,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     feeAmount,
     BigInt(l2Vault),   // positionId / vault
     BigInt(nonce),
-    expirationHours,
+    expirationSecs,
   ]);
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
