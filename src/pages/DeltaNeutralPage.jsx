@@ -363,10 +363,32 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
                   className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
                 />
                 {extL2Vault && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
-              </div>
+              </div> 
             </div>
           </div>
-
+          
+          {/* ── Reset ── */}
+<div className="border-t border-gray-700 pt-4">
+  <button
+    onClick={() => {
+      if (!confirm('Effacer toutes les clés et API sauvegardées ?')) return;
+      [
+        'hl_address', 'hl_agent_pk', 'hl_vault_address',
+        'ext_stark_pk', 'ext_l2_vault', 'extended_api_keys',
+      ].forEach(k => localStorage.removeItem(k));
+      onHlChange('');
+      onExtChange('');
+      setHlAgentPk('');
+      setHlVaultAddress('');
+      setExtStarkPk('');
+      setExtL2Vault('');
+    }}
+    className="w-full bg-red-900/30 hover:bg-red-800/50 border border-red-700 text-red-400 text-xs font-medium py-2 rounded-lg transition-colors"
+  >
+    🗑️ Effacer toutes les clés sauvegardées
+  </button>
+</div>
+          
         </div>
       )}
     </div>
