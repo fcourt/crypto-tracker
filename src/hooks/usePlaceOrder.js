@@ -52,6 +52,13 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const pxDecimals = order.pxDecimals ?? 2;
   const sizeStr    = order.size.toFixed(szDecimals);
   //const priceStr   = order.limitPrice.toFixed(pxDecimals);
+
+  const aggressivePrice = isMarket
+  ? (order.isBuy
+      ? order.limitPrice * 1.0075
+      : order.limitPrice * 0.9925)
+  : order.limitPrice;
+  
   const priceStr = aggressivePrice.toFixed(pxDecimals);
   const side              = order.isBuy ? 'BUY' : 'SELL';
   const l2VaultStr        = l2Vault.toString();
@@ -64,13 +71,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-
-  const aggressivePrice = isMarket
-  ? (order.isBuy
-      ? order.limitPrice * 1.0075
-      : order.limitPrice * 0.9925)
-  : order.limitPrice;
-
 
   // ✅ message signé = ce qu'on envoie réellement
 const message = {
@@ -173,7 +173,12 @@ export function usePlaceOrder() {
         starkPrivateKey: freshStarkPk,
         l2Vault:         freshL2Vault,
         extApiKey:       freshExtApiKey,
-        order: { extKey, isBuy, size, limitPrice, pxDecimals, szDecimals, orderType: params.orderType ?? 'maker' },      });
+        order: {
+          extKey, isBuy, size, limitPrice, pxDecimals, szDecimals,
+          orderType: params.orderType ?? 'maker',
+          reduceOnly: params.reduceOnly ?? false,  // ✅ ajouter
+          },
+      });
     }
 
     if (!freshAgentPk) throw new Error('Clé privée agent HL manquante');
