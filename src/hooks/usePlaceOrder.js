@@ -48,11 +48,10 @@ function generateOrderId() {
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
-  // const sizeStr           = order.size.toFixed(order.szDecimals ?? 6);
-  // const priceStr          = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  
-  const sizeStr  = order.size.toFixed(szDecimals);
-const priceStr = order.limitPrice.toFixed(pxDecimals);
+  const szDecimals = order.szDecimals ?? 2;
+  const pxDecimals = order.pxDecimals ?? 2;
+  const sizeStr    = order.size.toFixed(szDecimals);
+  const priceStr   = order.limitPrice.toFixed(pxDecimals);
   const side              = order.isBuy ? 'BUY' : 'SELL';
   const l2VaultStr        = l2Vault.toString();
 
