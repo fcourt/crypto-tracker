@@ -105,13 +105,24 @@ async function fetchExtMids() {
     `/api/extended?endpoint=${encodeURIComponent('/info/markets')}`
   );
   const data = await res.json();
-  const map  = {};
+  const priceMap     = {};
+  const precisionMap = {}; // 👈 nouveau
+
   (data.data || []).forEach(m => {
     const key   = m.name;
     const price = parseFloat(m.marketStats?.lastPrice || 0);
-    if (key && price) map[key] = price;
+    if (key && price) priceMap[key] = price;
+
+    // 👈 stocker les précisions pour chaque marché
+    if (key) {
+      precisionMap[key] = {
+        szDecimals: m.quantityPrecision ?? m.qtyPrecision ?? m.sizePrecision ?? 2,
+        pxDecimals: m.pricePrecision    ?? 2,
+      };
+    }
   });
-  return map;
+
+  return { priceMap, precisionMap }; // 👈 retourner les deux
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
@@ -120,23 +131,23 @@ export function useLivePrices(intervalMs = 3000) {
   const [hlMids,     setHlMids]     = useState({});
   const [hlSteps,    setHlSteps]    = useState({});
   const [extMids,    setExtMids]    = useState({});
+  const [extPrecisions, setExtPrecisions] = useState({}); 
   const [lastUpdate, setLastUpdate] = useState(null);
   const timer = useRef(null);
 
   const fetchAll = async () => {
-    try {
-      const [{ prices, stepSizes }, ext] = await Promise.all([
-        fetchHLMids(),
-        fetchExtMids(),
-      ]);
-      setHlMids(prices    || {});
-      setHlSteps(stepSizes || {});
-      setExtMids(ext       || {});
-      setLastUpdate(new Date());
-    } catch (e) {
-      console.warn('useLivePrices error:', e.message);
-    }
-  };
+  const [{ prices, stepSizes }, { priceMap, precisionMap }] = await Promise.all([
+    fetchHLMids(),
+    fetchExtMids(),
+  ]);
+  setHlMids(prices        || {});
+  setHlSteps(stepSizes    || {});
+  setExtMids(priceMap      || {});
+  setExtPrecisions(precisionMap || {}); // 👈
+  setLastUpdate(new Date());
+};
+
+  const getExtPrecision = (extKey) => extPrecisions[extKey] ?? { szDecimals: 2, pxDecimals: 2 };
 
   useEffect(() => {
     fetchAll();
@@ -164,5 +175,5 @@ export function useLivePrices(intervalMs = 3000) {
     return hlSteps[market.hlKey] ?? 0.01;
   };
 
-  return { getPrice, getStepSize, hlMids, extMids, lastUpdate };
+  return { getPrice, getStepSize, hlMids, extMids, lastUpdate, getExtPrecision };
 }
