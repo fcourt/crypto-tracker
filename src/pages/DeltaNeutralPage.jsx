@@ -579,30 +579,20 @@ function LegCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-  <div className={`rounded-lg px-3 py-2 ${orderType === 'maker' ? 'bg-blue-900/30 border border-blue-700' : 'bg-gray-900'}`}>
-    <p className="text-gray-500 text-xs">Fees maker</p>
-    <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
-    <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
-  </div>
-  <div className={`rounded-lg px-3 py-2 ${orderType === 'taker' ? 'bg-orange-900/30 border border-orange-700' : 'bg-gray-900'}`}>
-    <p className="text-gray-500 text-xs">Fees taker</p>
-    <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
-    <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
-  </div>
-</div>
+        <div className={`rounded-lg px-3 py-2 ${orderType === 'taker' ? 'bg-orange-900/30 border border-orange-700' : 'bg-gray-900'}`}>
+          <p className="text-gray-500 text-xs">Fees taker</p>
+          <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
+          <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
+        </div>
+        <div className={`rounded-lg px-3 py-2 ${orderType === 'maker' ? 'bg-blue-900/30 border border-blue-700' : 'bg-gray-900'}`}>
+          <p className="text-gray-500 text-xs">Fees maker</p>
+          <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
+          <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
+        </div>
+      </div>
 
 {/* Toggle Maker / Taker */}
 <div className="flex rounded-lg overflow-hidden border border-gray-600 text-xs font-medium">
-  <button
-    onClick={() => onOrderTypeChange('maker')}
-    className={`flex-1 py-2 transition-colors ${
-      orderType === 'maker'
-        ? 'bg-blue-700 text-white'
-        : 'bg-gray-800 text-gray-400 hover:text-white'
-    }`}
-  >
-    📋 Limit — Maker
-  </button>
   <button
     onClick={() => onOrderTypeChange('taker')}
     className={`flex-1 py-2 transition-colors ${
@@ -612,6 +602,16 @@ function LegCard({
     }`}
   >
     ⚡ Market — Taker
+  </button>
+  <button
+    onClick={() => onOrderTypeChange('maker')}
+    className={`flex-1 py-2 transition-colors ${
+      orderType === 'maker'
+        ? 'bg-blue-700 text-white'
+        : 'bg-gray-800 text-gray-400 hover:text-white'
+    }`}
+  >
+    📋 Limit — Maker
   </button>
 </div>
       
