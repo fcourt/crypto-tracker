@@ -123,6 +123,7 @@ console.log('payload envoyé:', JSON.stringify(payload, null, 2));
 console.log('starkKey:', starkKey);
 console.log('l2Vault:', l2VaultStr);
 console.log('msgHash:', msgHash);
+console.log('size brute:', order.size, '| szDecimals:', szDecimals, '| sizeStr:', sizeStr);
   
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
