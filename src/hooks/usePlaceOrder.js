@@ -64,7 +64,9 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const amountBuy   = isBuy ? baseAmount  : quoteAmount;
 
   // Expiration en heures (arrondi sup)
-  const expirationHours = BigInt(Math.ceil(expiryEpochMillis / 1000 / 3600));
+  //const expirationHours = BigInt(Math.ceil(expiryEpochMillis / 1000 / 3600));
+  const SERVER_CLOCK_OFFSET_MS = 14 * 24 * 3600 * 1000; // +14 jours
+  const expirationHours = BigInt(Math.ceil((expiryEpochMillis + SERVER_CLOCK_OFFSET_MS) / 1000 / 3600));
 
   // ✅ Hash StarkEx perpetual — instruction type 3
   const LIMIT_ORDER_WITH_FEES = 3n;
