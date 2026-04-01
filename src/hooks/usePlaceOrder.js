@@ -55,6 +55,11 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const side              = order.isBuy ? 'BUY' : 'SELL';
   const l2VaultStr        = l2Vault.toString();
 
+  const orderType     = order.orderType ?? 'maker';
+  const isMarket      = orderType === 'taker';
+  const timeInForce   = isMarket ? 'IOC' : 'GTT';
+  const type          = isMarket ? 'MARKET' : 'LIMIT';
+
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
     .map(b => b.toString(16).padStart(2, '0'))
@@ -82,19 +87,19 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const payload = {
     id:                generateOrderId(),
     market:            order.extKey,
-    type:              'LIMIT',
+    type,                          // ✅ 'LIMIT' ou 'MARKET'
     side,
     qty:               sizeStr,
-    price:             priceStr,
-    timeInForce:       'GTT',
-    expiryEpochMillis,
+    price:             isMarket ? undefined : priceStr, // ✅ pas de price en market
+    timeInForce,                   // ✅ 'GTT' ou 'IOC'
+    expiryEpochMillis: isMarket ? undefined : expiryEpochMillis,
     fee:               '0.0005',
     nonce:             nonce.toString(),
-    settlement: {
-      signature: {
-        r: '0x' + r.toString(16).padStart(64, '0'),
-        s: '0x' + s.toString(16).padStart(64, '0'),
-      },
+      settlement: {
+        signature: {
+          r: '0x' + r.toString(16).padStart(64, '0'),
+          s: '0x' + s.toString(16).padStart(64, '0'),
+        },
       starkKey,
       collateralPosition: l2VaultStr,
     },
@@ -158,8 +163,7 @@ export function usePlaceOrder() {
         starkPrivateKey: freshStarkPk,
         l2Vault:         freshL2Vault,
         extApiKey:       freshExtApiKey,
-        order: { extKey, isBuy, size, limitPrice, pxDecimals, szDecimals },
-      });
+        order: { extKey, isBuy, size, limitPrice, pxDecimals, szDecimals, orderType: params.orderType ?? 'maker' },      });
     }
 
     if (!freshAgentPk) throw new Error('Clé privée agent HL manquante');
@@ -167,18 +171,20 @@ export function usePlaceOrder() {
     const wallet   = privateKeyToAccount(freshAgentPk);
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
 
-    const result = await exchange.order({
-      orders: [{
-        a: assetIndex,
-        b: isBuy,
-        p: limitPrice.toFixed(pxDecimals ?? 2),
-        s: size.toFixed(szDecimals ?? 6),
-        r: false,
-        t: { limit: { tif: 'Gtc' } },
-      }],
-      grouping:     'na',
-      vaultAddress: freshVaultAddress || undefined,
-    });
+    const isMaker = !params.orderType || params.orderType === 'maker';
+
+const result = await exchange.order({
+  orders: [{
+    a: assetIndex,
+    b: isBuy,
+    p: limitPrice.toFixed(pxDecimals ?? 2),
+    s: size.toFixed(szDecimals ?? 6),
+    r: false,
+    t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } }, // ✅
+  }],
+  grouping:     'na',
+  vaultAddress: freshVaultAddress || undefined,
+});
 
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
     return result;
