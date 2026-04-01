@@ -71,16 +71,17 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   // ✅ Hash StarkEx perpetual — instruction type 3
   const LIMIT_ORDER_WITH_FEES = 3n;
   const msgHash = hash.computeHashOnElements([
-    LIMIT_ORDER_WITH_FEES,
-    BigInt(assetIdSell),
-    BigInt(assetIdBuy),
-    amountSell,
-    amountBuy,
-    feeAmount,
-    BigInt(l2Vault),   // positionId / vault
-    BigInt(nonce),
-    expirationSecs,
-  ]);
+  LIMIT_ORDER_WITH_FEES,
+  BigInt(assetIdSell),
+  BigInt(assetIdBuy),
+  amountSell,
+  amountBuy,
+  feeAmount,
+  BigInt(l2Vault),   // vault_sold (positionId)
+  BigInt(l2Vault),   // vault_bought (même valeur pour perps)
+  BigInt(nonce),
+  expirationSecs,
+]);
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
