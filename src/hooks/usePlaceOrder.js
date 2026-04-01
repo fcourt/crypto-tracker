@@ -91,7 +91,8 @@ const message = {
     type,                          // ✅ 'LIMIT' ou 'MARKET'
     side,
     qty:               sizeStr,
-    price:             isMarket ? undefined : priceStr, // ✅ pas de price en market
+    //price:             isMarket ? undefined : priceStr, // ✅ pas de price en market
+    price: isMarket ? '0' : priceStr
     timeInForce,                   // ✅ 'GTT' ou 'IOC'
     expiryEpochMillis: isMarket ? undefined : expiryEpochMillis,
     fee:               '0.0005',
