@@ -728,7 +728,7 @@ const canTradePlatform = (platformId) => {
   return canTradeHL;
 };
 
-const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType) => {
+const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
   const hlKey = market?.hlKey;
   const meta  = getAssetMeta(hlKey);
 
@@ -753,6 +753,7 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType) =>
     szDecimals,
     pxDecimals,
     orderType,
+    reduceOnly,
   };
 };
 
