@@ -48,32 +48,34 @@ function generateOrderId() {
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
-  const szDecimals = order.szDecimals ?? 2;
-  const pxDecimals = order.pxDecimals ?? 2;
-  const sizeStr    = order.size.toFixed(szDecimals);
-  //const priceStr   = order.limitPrice.toFixed(pxDecimals);
-
-  const aggressivePrice = isMarket
-  ? (order.isBuy
-      ? order.limitPrice * 1.0075
-      : order.limitPrice * 0.9925)
-  : order.limitPrice;
-  
-  const priceStr = aggressivePrice.toFixed(pxDecimals);
-  const side              = order.isBuy ? 'BUY' : 'SELL';
-  const l2VaultStr        = l2Vault.toString();
-
+ 
+  // ✅ orderType et isMarket EN PREMIER
   const orderType     = order.orderType ?? 'maker';
   const isMarket      = orderType === 'taker';
   const timeInForce   = isMarket ? 'IOC' : 'GTT';
-  const type        = 'LIMIT'; 
+  const type          = 'LIMIT';
+
+  // ✅ aggressivePrice APRÈS isMarket
+  const aggressivePrice = isMarket
+    ? (order.isBuy ? order.limitPrice * 1.0075 : order.limitPrice * 0.9925)
+    : order.limitPrice;
+
+  // ✅ priceStr APRÈS aggressivePrice
+  const szDecimals = order.szDecimals ?? 2;
+  const pxDecimals = order.pxDecimals ?? 2;
+  const sizeStr    = order.size.toFixed(szDecimals);
+  const priceStr   = aggressivePrice.toFixed(pxDecimals);
+  
+  const side              = order.isBuy ? 'BUY' : 'SELL';
+  const l2VaultStr        = l2Vault.toString();
+
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
   // ✅ message signé = ce qu'on envoie réellement
-const message = {
+  const message = {
   market:      order.extKey,
   side,
   type:        'LIMIT',     // ✅ toujours LIMIT
