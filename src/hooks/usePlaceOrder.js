@@ -87,61 +87,11 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   l2Vault:     l2VaultStr,
 };
 
-function buildExtendedL2Hash({
-  side,           // 'BUY' | 'SELL'
-  sizeStr,        // ex: "0.24" — la taille arrondie
-  priceStr,       // ex: "83.67"
-  market,         // ex: "SOL-USD"
-  l2Vault,        // ex: 364703
-  nonce,          // ex: 1806786153
-  expiresAt,      // ms epoch — ex: 1775073083909
-  feeRate = 0.0005,
-  l2Config,       // { syntheticId, syntheticResolution, collateralId, collateralResolution }
-}) {
-  const { syntheticId, syntheticResolution, collateralId, collateralResolution } = l2Config;
-
-  const isBuy = side === 'BUY';
-
-  // 1. Montants internes
-  const baseAmount  = BigInt(Math.round(parseFloat(sizeStr)  * syntheticResolution));
-  const quoteAmount = BigInt(Math.round(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution));
-  const feeAmount   = BigInt(Math.ceil(Number(quoteAmount) * feeRate));
-
-  // 2. Ids actifs selon sens
-  // SELL : vend synthetic, reçoit collateral
-  // BUY  : vend collateral, reçoit synthetic
-  const assetIdSell = isBuy  ? collateralId : syntheticId;
-  const assetIdBuy  = isBuy  ? syntheticId  : collateralId;
-  const amountSell  = isBuy  ? quoteAmount  : baseAmount;
-  const amountBuy   = isBuy  ? baseAmount   : quoteAmount;
-
-  // 3. Expiration en heures (arrondi supérieur)
-  const expirationTimestamp = BigInt(Math.ceil(expiresAt / 1000 / 3600));
-
-  // 4. Hash StarkEx perpetual order (SNIP-12)
-  // Instruction type = 3 pour LimitOrder perpetual
-  const LIMIT_ORDER_WITH_FEES = 3n;
-
-  const msgHash = hash.computeHashOnElements([
-    LIMIT_ORDER_WITH_FEES,
-    BigInt(assetIdSell),
-    BigInt(assetIdBuy),
-    amountSell,
-    amountBuy,
-    feeAmount,
-    BigInt(l2Vault),   // positionId
-    BigInt(l2Vault),   // positionId (collateral vault = même)
-    BigInt(nonce),
-    expirationTimestamp,
-  ]);
-
-  return msgHash;
-}
   
-  //const msgHash = typedData.getMessageHash(
-    //{ types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    //starkKey
-  //);
+  const msgHash = typedData.getMessageHash(
+    { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
+    starkKey
+  );
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
