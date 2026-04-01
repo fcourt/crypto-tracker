@@ -858,6 +858,7 @@ const canTradePlatform = (platformId) => {
 };
 
 const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
+  console.log('buildOrderParams:', { platformId, side, sizeAsset, limitPrice }); // ← ajoute ce log temporaire
   const hlKey = market?.hlKey;
   const meta  = getAssetMeta(hlKey);
 
