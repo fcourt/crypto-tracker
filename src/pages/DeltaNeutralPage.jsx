@@ -504,6 +504,7 @@ function LegCard({
   useStepSize, stepSize,
   onPlaceOrder, isPlacingOrder, canTrade,
   orderType, onOrderTypeChange, 
+  openPosition, closePx, onClosePxChange, closeOrderType, onCloseOrderTypeChange, onCloseLeg
 }) {
   const isLong     = side === 'LONG';
   const fundingNet = fundingRate != null ? (isLong ? -fundingRate : fundingRate) : null;
@@ -636,6 +637,69 @@ function LegCard({
     📋 Limit — Maker
   </button>
 </div>
+
+{openPosition && (
+  <div className="border-t border-gray-600 pt-3 flex flex-col gap-2">
+    <p className="text-xs font-bold text-orange-400">
+      🔒 Fermer la position ({openPosition.side} {fmt(openPosition.szi, 6)})
+    </p>
+
+    {/* Toggle Limit BE / Market */}
+    <div className="flex rounded-lg overflow-hidden border border-gray-600 text-xs font-medium">
+      <button
+        onClick={() => onCloseOrderTypeChange('maker')}
+        className={`flex-1 py-1.5 transition-colors ${
+          closeOrderType === 'maker'
+            ? 'bg-blue-700 text-white'
+            : 'bg-gray-800 text-gray-400 hover:text-white'
+        }`}
+      >
+        📋 Limit (BE)
+      </button>
+      <button
+        onClick={() => onCloseOrderTypeChange('taker')}
+        className={`flex-1 py-1.5 transition-colors ${
+          closeOrderType === 'taker'
+            ? 'bg-orange-700 text-white'
+            : 'bg-gray-800 text-gray-400 hover:text-white'
+        }`}
+      >
+        ⚡ Market
+      </button>
+    </div>
+
+    {/* Prix de sortie (modifiable) */}
+    {closeOrderType === 'maker' && (
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-gray-500 shrink-0">Prix sortie</label>
+        <input
+          type="number"
+          value={closePx}
+          onChange={e => onClosePxChange(e.target.value)}
+          className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+        />
+        <button
+          onClick={() => onClosePxChange(openPosition.entryPx?.toFixed(2) ?? '')}
+          className="text-xs text-blue-400 hover:text-blue-300 shrink-0"
+        >
+          ↺ BE
+        </button>
+      </div>
+    )}
+
+    {/* Bouton fermeture */}
+    <button
+      onClick={onCloseLeg}
+      disabled={isPlacingOrder || (closeOrderType === 'maker' && !closePx)}
+      className="w-full bg-orange-800 hover:bg-orange-700 disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2"
+    >
+      {isPlacingOrder
+        ? <><span className="animate-spin">⟳</span> Fermeture en cours...</>
+        : <>🔒 Fermer {openPosition.side} sur {platform?.label}</>
+      }
+    </button>
+  </div>
+)}
       
       {/* ── Boutons action (remplacer l'ancien bouton "Copier la size") ── */}
       {sizeDisplay && (
@@ -685,6 +749,13 @@ export default function DeltaNeutralPage() {
 
   const [orderType1, setOrderType1] = useState('maker');
   const [orderType2, setOrderType2] = useState('maker');
+
+  const [loadedPosition1, setLoadedPosition1] = useState(null);
+  const [loadedPosition2, setLoadedPosition2] = useState(null);
+  const [closePx1, setClosePx1] = useState(''); // prix de fermeture leg 1 (BE = entryPx)
+  const [closePx2, setClosePx2] = useState(''); // prix de fermeture leg 2
+  const [closeOrderType1, setCloseOrderType1] = useState('maker');
+  const [closeOrderType2, setCloseOrderType2] = useState('maker');
   
   //const { getPrice, getStepSize, getExtPrecision } = useLivePrices();
   const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
@@ -717,10 +788,68 @@ export default function DeltaNeutralPage() {
   
   // ✅ Dans le composant
   const handleLoadPosition = (pos) => {
-  setLoadedPosition(pos);
-  if (pos.marketId)  setMarketId(pos.marketId);
-  setPlatform1(pos.platform);
-  setSizeUSD(pos.sizeUSD);
+  if (pos.marketId) setMarketId(pos.marketId);
+
+  // Détermine sur quel leg affecter
+  if (!loadedPosition1 || pos.platform === platform1) {
+    setPlatform1(pos.platform);
+    setLoadedPosition1(pos);
+    setClosePx1(pos.entryPx?.toFixed(2) ?? '');
+    setSizeUSD(pos.sizeUSD);
+  } else {
+    setPlatform2(pos.platform);
+    setLoadedPosition2(pos);
+    setClosePx2(pos.entryPx?.toFixed(2) ?? '');
+  }
+};
+
+  // ✅ CORRIGÉ
+const handleCloseLeg = async (legNum) => {
+  const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
+  const pos        = legNum === 1 ? loadedPosition1 : loadedPosition2;
+  const platformId = pos.platform;
+  const closePx    = parseFloat(legNum === 1 ? closePx1 : closePx2);
+  const orderType  = legNum === 1 ? closeOrderType1 : closeOrderType2;
+  const side       = pos.side === 'LONG' ? 'SHORT' : 'LONG';
+
+  setter(true);
+  setTradeStatus(null);
+  try {
+    await placeOrder(buildOrderParams(platformId, side, pos.szi, closePx, orderType, true)); // ✅ un seul appel, avec reduceOnly
+    setTradeStatus({ type: 'success', msg: `✅ Fermeture ${pos.side} envoyée sur ${PLATFORMS.find(p => p.id === platformId)?.label}` });
+  } catch (e) {
+    setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
+  } finally {
+    setter(false);
+  }
+};
+
+ // ✅ CORRIGÉ — supprimer cette ligne, et ajouter reduceOnly: true aux deux legs
+const handleCloseBothLegs = async () => {
+  if (!loadedPosition1 || !loadedPosition2) return;
+  setPlacingLeg1(true);
+  setPlacingLeg2(true);
+  setTradeStatus(null);
+  try {
+    await Promise.all([
+      placeOrder(buildOrderParams(
+        loadedPosition1.platform,
+        loadedPosition1.side === 'LONG' ? 'SHORT' : 'LONG',
+        loadedPosition1.szi, parseFloat(closePx1), closeOrderType1, true  // ✅ reduceOnly
+      )),
+      placeOrder(buildOrderParams(
+        loadedPosition2.platform,
+        loadedPosition2.side === 'LONG' ? 'SHORT' : 'LONG',
+        loadedPosition2.szi, parseFloat(closePx2), closeOrderType2, true  // ✅ reduceOnly
+      )),
+    ]);
+    setTradeStatus({ type: 'success', msg: '✅ Fermeture des 2 legs envoyée !' });
+  } catch (e) {
+    setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
+  } finally {
+    setPlacingLeg1(false);
+    setPlacingLeg2(false);
+  }
 };
 
 const canTradePlatform = (platformId) => {
@@ -1025,6 +1154,12 @@ const handlePlaceBothLegs = async () => {
           canTrade={canTradePlatform(platform1)}
           onPlaceOrder={() => handlePlaceLeg(1)}
           isPlacingOrder={placingLeg1}
+          openPosition={loadedPosition1}
+          closePx={closePx1}
+          onClosePxChange={setClosePx1}
+          closeOrderType={closeOrderType1}
+          onCloseOrderTypeChange={setCloseOrderType1}
+          onCloseLeg={() => handleCloseLeg(1)}
         />
         <LegCard
           side={side2}
@@ -1046,6 +1181,12 @@ const handlePlaceBothLegs = async () => {
           canTrade={canTradePlatform(platform2)}
           onPlaceOrder={() => handlePlaceLeg(2)}
           isPlacingOrder={placingLeg2}
+          openPosition={loadedPosition2}
+          closePx={closePx2}
+          onClosePxChange={setClosePx2}
+          closeOrderType={closeOrderType2}
+          onCloseOrderTypeChange={setCloseOrderType2}
+          onCloseLeg={() => handleCloseLeg(2)}
         />
       </div>
 {/* ── Feedback statut ── */}
@@ -1059,8 +1200,42 @@ const handlePlaceBothLegs = async () => {
   </div>
 )}
 
+{loadedPosition1 && loadedPosition2 && (
+  <div className="bg-orange-900/20 border border-orange-700 rounded-xl p-4 flex flex-col gap-3">
+    <p className="text-xs font-bold text-orange-400">
+      🔒 Fermeture Delta Neutral — {loadedPosition1.label}
+    </p>
+    <div className="grid grid-cols-2 gap-3 text-xs text-gray-400">
+      <div>
+        <p>{plat1?.label} · {loadedPosition1.side} {fmt(loadedPosition1.szi, 6)}</p>
+        <p>Entry : {fmtUSD(loadedPosition1.entryPx)}</p>
+        <p className={loadedPosition1.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+          PnL : {fmtUSD(loadedPosition1.unrealizedPnl)}
+        </p>
+      </div>
+      <div>
+        <p>{plat2?.label} · {loadedPosition2.side} {fmt(loadedPosition2.szi, 6)}</p>
+        <p>Entry : {fmtUSD(loadedPosition2.entryPx)}</p>
+        <p className={loadedPosition2.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+          PnL : {fmtUSD(loadedPosition2.unrealizedPnl)}
+        </p>
+      </div>
+    </div>
+    <button
+      onClick={handleCloseBothLegs}
+      disabled={placingLeg1 || placingLeg2}
+      className="w-full bg-orange-700 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-lg transition-all flex items-center justify-center gap-2"
+    >
+      {(placingLeg1 || placingLeg2)
+        ? <><span className="animate-spin">⟳</span> Fermeture en cours...</>
+        : <>🔒 Fermer les 2 positions simultanément</>
+      }
+    </button>
+  </div>
+)}
+      
 {/* ── Bouton 2 legs simultanés (si aucune position chargée) ── */}
-{calc && !loadedPosition && (canTradeHL || canTradeExt) && (
+{calc && !loadedPosition1 && !loadedPosition2 && (canTradeHL || canTradeExt) && (
   <button
     onClick={handlePlaceBothLegs}
     disabled={placingLeg1 || placingLeg2 || !calc.limitP1 || !calc.limitP2}
@@ -1074,13 +1249,15 @@ const handlePlaceBothLegs = async () => {
 )}
 
 {/* ── Bouton 1 leg restant (si position déjà chargée) ── */}
-{calc && loadedPosition && (
+{calc && (loadedPosition1 || loadedPosition2) && !(loadedPosition1 && loadedPosition2) && (
   <div className="rounded-xl border border-yellow-700 bg-yellow-900/20 px-4 py-3 flex flex-col gap-2">
     <p className="text-xs text-yellow-400 font-medium">
-      ⚡ Position {loadedPosition.side} déjà ouverte sur {PLATFORMS.find(p => p.id === loadedPosition.platform)?.label} — ouverture du leg manquant uniquement
+      ⚡ Position {(loadedPosition1 ?? loadedPosition2).side} déjà ouverte sur{' '}
+      {PLATFORMS.find(p => p.id === (loadedPosition1 ?? loadedPosition2).platform)?.label}{' '}
+      — ouverture du leg manquant uniquement
     </p>
     <button
-      onClick={() => handlePlaceLeg(loadedPosition.platform === platform1 ? 2 : 1)}
+      onClick={() => handlePlaceLeg(loadedPosition1 ? 2 : 1)}
       disabled={placingLeg1 || placingLeg2}
       className="w-full bg-yellow-700 hover:bg-yellow-600 disabled:opacity-50 text-white font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 text-sm"
     >
@@ -1090,7 +1267,7 @@ const handlePlaceBothLegs = async () => {
       }
     </button>
     <button
-      onClick={() => setLoadedPosition(null)}
+      onClick={() => { setLoadedPosition1(null); setLoadedPosition2(null); }}
       className="text-xs text-gray-500 hover:text-gray-300 text-center transition-colors"
     >
       ✕ Annuler (ouvrir les 2 legs)
