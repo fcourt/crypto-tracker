@@ -481,6 +481,7 @@ function LegCard({
   fundingRate, isSuggested, feesMaker, feesTaker,
   useStepSize, stepSize,
   onPlaceOrder, isPlacingOrder, canTrade,
+  orderType, onOrderTypeChange, 
 }) {
   const isLong     = side === 'LONG';
   const fundingNet = fundingRate != null ? (isLong ? -fundingRate : fundingRate) : null;
@@ -578,18 +579,42 @@ function LegCard({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-gray-900 rounded-lg px-3 py-2">
-          <p className="text-gray-500 text-xs">Fees maker</p>
-          <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
-          <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
-        </div>
-        <div className="bg-gray-900 rounded-lg px-3 py-2">
-          <p className="text-gray-500 text-xs">Fees taker</p>
-          <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
-          <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
-        </div>
-      </div>
+  <div className={`rounded-lg px-3 py-2 ${orderType === 'maker' ? 'bg-blue-900/30 border border-blue-700' : 'bg-gray-900'}`}>
+    <p className="text-gray-500 text-xs">Fees maker</p>
+    <p className="text-yellow-300 font-bold">{feeMaker != null ? fmtUSD(feeMaker) : '—'}</p>
+    <p className="text-gray-600 text-xs">{(feesMaker * 100).toFixed(3)}%</p>
+  </div>
+  <div className={`rounded-lg px-3 py-2 ${orderType === 'taker' ? 'bg-orange-900/30 border border-orange-700' : 'bg-gray-900'}`}>
+    <p className="text-gray-500 text-xs">Fees taker</p>
+    <p className="text-yellow-300 font-bold">{feeTaker != null ? fmtUSD(feeTaker) : '—'}</p>
+    <p className="text-gray-600 text-xs">{(feesTaker * 100).toFixed(3)}%</p>
+  </div>
+</div>
 
+{/* Toggle Maker / Taker */}
+<div className="flex rounded-lg overflow-hidden border border-gray-600 text-xs font-medium">
+  <button
+    onClick={() => onOrderTypeChange('maker')}
+    className={`flex-1 py-2 transition-colors ${
+      orderType === 'maker'
+        ? 'bg-blue-700 text-white'
+        : 'bg-gray-800 text-gray-400 hover:text-white'
+    }`}
+  >
+    📋 Limit — Maker
+  </button>
+  <button
+    onClick={() => onOrderTypeChange('taker')}
+    className={`flex-1 py-2 transition-colors ${
+      orderType === 'taker'
+        ? 'bg-orange-700 text-white'
+        : 'bg-gray-800 text-gray-400 hover:text-white'
+    }`}
+  >
+    ⚡ Market — Taker
+  </button>
+</div>
+      
       {/* ── Boutons action (remplacer l'ancien bouton "Copier la size") ── */}
       {sizeDisplay && (
         <div className="flex flex-col gap-2">
@@ -635,6 +660,9 @@ export default function DeltaNeutralPage() {
   const [sizeUSD,     setSizeUSD]     = useState('');
   const [useStepSize, setUseStepSize] = useState(false);
   const [fees,        setFees]        = useState(loadFees);
+
+  const [orderType1, setOrderType1] = useState('maker');
+  const [orderType2, setOrderType2] = useState('maker');
   
   //const { getPrice, getStepSize, getExtPrecision } = useLivePrices();
   const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
@@ -678,7 +706,7 @@ const canTradePlatform = (platformId) => {
   return canTradeHL;
 };
 
-const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => {
+const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType) => {
   const hlKey = market?.hlKey;
   const meta  = getAssetMeta(hlKey);
 
@@ -702,6 +730,7 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice) => {
     limitPrice,
     szDecimals,
     pxDecimals,
+    orderType,
   };
 };
 
@@ -712,10 +741,12 @@ const handlePlaceLeg = async (legNum) => {
   const sizeAsset = legNum === 1 ? calc?.asset1 : calc?.asset2;
   const limitPx   = legNum === 1 ? calc?.limitP1 : calc?.limitP2;
 
+  const orderType  = legNum === 1 ? orderType1 : orderType2;
+
   setter(true);
   setTradeStatus(null);
   try {
-    await placeOrder(buildOrderParams(platformId, side, sizeAsset, limitPx));
+    await placeOrder(buildOrderParams(platformId, side, sizeAsset, limitPx, orderType));
     setTradeStatus({ type: 'success', msg: `✅ Ordre ${side} envoyé sur ${PLATFORMS.find(p => p.id === platformId)?.label}` });
   } catch (e) {
     setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
@@ -730,9 +761,9 @@ const handlePlaceBothLegs = async () => {
   setTradeStatus(null);
   try {
     await Promise.all([
-      placeOrder(buildOrderParams(platform1, side1, calc?.asset1, calc?.limitP1)),
-      placeOrder(buildOrderParams(platform2, side2, calc?.asset2, calc?.limitP2)),
-    ]);
+  placeOrder(buildOrderParams(platform1, side1, calc?.asset1, calc?.limitP1, orderType1)),
+  placeOrder(buildOrderParams(platform2, side2, calc?.asset2, calc?.limitP2, orderType2)),
+]);
     setTradeStatus({ type: 'success', msg: '✅ Les 2 legs envoyés simultanément !' });
   } catch (e) {
     setTradeStatus({ type: 'error', msg: `❌ Erreur : ${e.message}` });
@@ -966,6 +997,8 @@ const handlePlaceBothLegs = async () => {
           feesTaker={fees[platform1]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
+          orderType={orderType1}
+          onOrderTypeChange={setOrderType1}
           canTrade={canTradePlatform(platform1)}
           onPlaceOrder={() => handlePlaceLeg(1)}
           isPlacingOrder={placingLeg1}
@@ -985,6 +1018,8 @@ const handlePlaceBothLegs = async () => {
           feesTaker={fees[platform2]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
+          orderType={orderType2}
+          onOrderTypeChange={setOrderType2}
           canTrade={canTradePlatform(platform2)}
           onPlaceOrder={() => handlePlaceLeg(2)}
           isPlacingOrder={placingLeg2}
