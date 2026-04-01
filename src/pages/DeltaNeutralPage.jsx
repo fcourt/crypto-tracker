@@ -966,6 +966,9 @@ const handlePlaceBothLegs = async () => {
           feesTaker={fees[platform1]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
+          canTrade={canTradePlatform(platform1)}
+          onPlaceOrder={() => handlePlaceLeg(1)}
+          isPlacingOrder={placingLeg1}
         />
         <LegCard
           side={side2}
@@ -982,6 +985,9 @@ const handlePlaceBothLegs = async () => {
           feesTaker={fees[platform2]?.taker ?? 0}
           useStepSize={useStepSize}
           stepSize={getStepSize(marketId)}
+          canTrade={canTradePlatform(platform2)}
+          onPlaceOrder={() => handlePlaceLeg(2)}
+          isPlacingOrder={placingLeg2}
         />
       </div>
 {/* ── Feedback statut ── */}
