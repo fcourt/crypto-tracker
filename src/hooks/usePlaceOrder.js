@@ -1,54 +1,10 @@
-import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
-import { privateKeyToAccount } from 'viem/accounts';
-import { ec, typedData, stark } from 'starknet';
-
-const EXT_API_BASE = '/api/extended';
-
-const STARKNET_DOMAIN = {
-  name:     'Perpetuals',
-  version:  'v0',
-  chainId:  'SN_MAIN',
-  revision: '1',
-};
-
-const ORDER_TYPES = {
-  StarknetDomain: [
-    { name: 'name',     type: 'shortstring' },
-    { name: 'version',  type: 'shortstring' },
-    { name: 'chainId',  type: 'shortstring' },
-    { name: 'revision', type: 'shortstring' },
-  ],
-  Order: [
-    { name: 'market',      type: 'shortstring' },
-    { name: 'side',        type: 'shortstring' },
-    { name: 'type',        type: 'shortstring' },
-    { name: 'size',        type: 'shortstring' },
-    { name: 'price',       type: 'shortstring' },
-    { name: 'timeInForce', type: 'shortstring' },
-    { name: 'nonce',       type: 'felt'        },
-    { name: 'expiresAt',   type: 'felt'        },
-    { name: 'l2Vault',     type: 'felt'        },
-  ],
-};
-
-function generateNonce() {
-  return Math.floor(Math.random() * (2 ** 31 - 1)) + 1; // ≥1 et ≤2^31
-}
-
-function generateOrderId() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
-
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
-  const nonce            = generateNonce();
+  const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000; // +1h en ms
-  const sizeStr          = order.size.toFixed(order.szDecimals ?? 6);
-  const priceStr         = order.limitPrice.toFixed(order.pxDecimals ?? 2);
-  const side             = order.isBuy ? 'BUY' : 'SELL';
-  const l2VaultStr       = l2Vault.toString();
+  const sizeStr           = order.size.toFixed(order.szDecimals ?? 6);
+  const priceStr          = order.limitPrice.toFixed(order.pxDecimals ?? 2);
+  const side              = order.isBuy ? 'BUY' : 'SELL';
+  const l2VaultStr        = l2Vault.toString();
 
   // Clé publique Stark depuis la clé privée
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
@@ -56,7 +12,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
 
-  // Message SNIP-12 à signer
+  // ✅ expiresAt en MILLISECONDES dans la signature (cohérent avec expiryEpochMillis)
   const message = {
     market:      order.extKey,
     side,
@@ -65,28 +21,28 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     price:       priceStr,
     timeInForce: 'GTT',
     nonce:       nonce.toString(),
-    expiresAt:   Math.floor(expiryEpochMillis / 1000).toString(), // secondes pour la signature
+    expiresAt:   expiryEpochMillis.toString(), // ✅ ms, pas secondes
     l2Vault:     l2VaultStr,
   };
 
+  // ✅ accountAddress = l2Key (clé publique), pas le vault
   const msgHash = typedData.getMessageHash(
     { types: ORDER_TYPES, primaryType: 'Order', domain: STARKNET_DOMAIN, message },
-    stark.makeAddress(l2VaultStr)
+    starkKey  // ✅ clé publique Stark
   );
 
   const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
-  // Payload selon la doc exacte
   const payload = {
     id:                generateOrderId(),
-    market:            order.extKey,       // ex: "BTC-USDT"
+    market:            order.extKey,
     type:              'LIMIT',
     side,
     qty:               sizeStr,
     price:             priceStr,
     timeInForce:       'GTT',
-    expiryEpochMillis,
-    fee:               '0.0005',           // taker fee par défaut
+    expiryEpochMillis, // ✅ number en ms
+    fee:               '0.0005',
     nonce:             nonce.toString(),
     settlement: {
       signature: {
@@ -94,7 +50,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
         s: '0x' + s.toString(16).padStart(64, '0'),
       },
       starkKey,
-      collateralPosition: l2VaultStr,
+      collateralPosition: l2VaultStr, // ✅ champ attendu par l'API
     },
   };
 
@@ -105,6 +61,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
+        'User-Agent':   'TrekApp/1.0', // ✅ OBLIGATOIRE sinon 400
       },
       body: JSON.stringify(payload),
     }
@@ -125,63 +82,4 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     );
   }
   return data;
-}
-
-export function usePlaceOrder() {
-  const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
-  const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
-
-  // ✅ canTrade calculé une fois (juste pour l'UI)
-  const starkPrivateKey = localStorage.getItem('ext_stark_pk')  || '';
-  const l2Vault         = localStorage.getItem('ext_l2_vault')  || '';
-  const canTradeHL      = !!agentPrivateKey;
-  const canTradeExt     = !!starkPrivateKey && !!l2Vault;
-
-  const placeOrder = async (params) => {
-    // ✅ Toutes les clés relues à chaque appel, jamais en cache
-    const freshStarkPk  = localStorage.getItem('ext_stark_pk')   || '';
-    const freshL2Vault  = localStorage.getItem('ext_l2_vault')   || '';
-    const freshExtApiKey = (() => {
-      try {
-        return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
-      } catch { return ''; }
-    })();
-    const freshAgentPk      = localStorage.getItem('hl_agent_pk')      || '';
-    const freshVaultAddress = localStorage.getItem('hl_vault_address') || null;
-
-    const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
-
-    if (platformId === 'extended') {
-      if (!freshStarkPk || !freshL2Vault) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
-      return await placeExtendedOrder({
-        starkPrivateKey: freshStarkPk,
-        l2Vault:         freshL2Vault,
-        extApiKey:       freshExtApiKey,
-        order: { extKey, isBuy, size, limitPrice, pxDecimals, szDecimals },
-      });
-    }
-
-    if (!freshAgentPk) throw new Error('Clé privée agent HL manquante');
-
-    const wallet   = privateKeyToAccount(freshAgentPk);
-    const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
-
-    const result = await exchange.order({
-      orders: [{
-        a: assetIndex,
-        b: isBuy,
-        p: limitPrice.toFixed(pxDecimals ?? 2),
-        s: size.toFixed(szDecimals ?? 6),
-        r: false,
-        t: { limit: { tif: 'Gtc' } },
-      }],
-      grouping:     'na',
-      vaultAddress: freshVaultAddress || undefined,
-    });
-
-    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
-    return result;
-  };
-
-  return { placeOrder, canTradeHL, canTradeExt };
 }
