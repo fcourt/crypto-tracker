@@ -120,6 +120,11 @@ console.log('expirationSecs:', expirationSecs.toString());
   console.log('msgHash:', msgHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
 
+  console.log('assetIdSell:', assetIdSell, '| assetIdBuy:', assetIdBuy, '| assetIdFee: 0x1');
+console.log('amountSell:', amountSell.toString(), '| amountBuy:', amountBuy.toString());
+console.log('packed0:', packed0.toString(16));
+console.log('packed1:', packed1.toString(16));
+
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
     {
