@@ -11,6 +11,7 @@
     "@nktkas/hyperliquid": "^0.30.0",
     "viem": "^2.21.0",
     "starknet": "^6.11.0"
+    "extended-typescript-sdk": "^0.8.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
