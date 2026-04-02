@@ -19,7 +19,7 @@ export default defineConfig({
       '/api': {
         target: 'https://api.extended.exchange',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\\/api\\/extended\\?endpoint=/, ''),
+        rewrite: (path) => path.replace(/^\/api\/extended\?endpoint=/, ''),
       },
     },
   },
