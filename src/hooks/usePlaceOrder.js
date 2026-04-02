@@ -116,7 +116,7 @@ const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
   console.log('=== Extended Order Debug ===');
   console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', quoteAmount.toString(), '| feeAmount:', feeAmount.toString());
-  console.log('expirationHours:', expirationHours.toString());
+console.log('expirationSecs:', expirationSecs.toString());
   console.log('msgHash:', msgHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
 
