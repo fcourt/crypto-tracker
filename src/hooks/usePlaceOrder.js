@@ -60,46 +60,48 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const amountSell  = isBuy ? quoteAmount : baseAmount;
   const amountBuy   = isBuy ? baseAmount  : quoteAmount;
 
-  // Expiration : secondes dans packed1 (pas heures)
-const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
+  const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
-// packed0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
-const packed0 =
-  (amountSell << 160n) |
-  (amountBuy  <<  96n) |
-  (feeAmount  <<  32n) |
-  BigInt(nonce);
+  // packed0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
+  const packed0 =
+    (amountSell << 160n) |
+    (amountBuy  <<  96n) |
+    (feeAmount  <<  32n) |
+    BigInt(nonce);
 
-// packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
-const packed1 =
-  (3n              << 241n) |
-  (BigInt(l2Vault) << 177n) |
-  (BigInt(l2Vault) << 113n) |
-  (BigInt(l2Vault) <<  49n) |
-  (expirationSecs  <<  17n);
+  // packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
+  const packed1 =
+    (3n              << 241n) |
+    (BigInt(l2Vault) << 177n) |
+    (BigInt(l2Vault) << 113n) |
+    (BigInt(l2Vault) <<  49n) |
+    (expirationSecs  <<  17n);
 
-const { computePedersenHash } = hash;
+  const { computePedersenHash } = hash;
 
-// Conversion en hex strings pour starknet.js v6
-const hexSell  = '0x' + BigInt(assetIdSell).toString(16);
-const hexBuy   = '0x' + BigInt(assetIdBuy).toString(16);
-const hexPack0 = '0x' + packed0.toString(16);
-const hexPack1 = '0x' + packed1.toString(16);
+  const hexSell  = '0x' + BigInt(assetIdSell).toString(16);
+  const hexBuy   = '0x' + BigInt(assetIdBuy).toString(16);
+  const hexPack0 = '0x' + packed0.toString(16);
+  const hexPack1 = '0x' + packed1.toString(16);
 
-const msgHash = computePedersenHash(
-  computePedersenHash(
+  // H(H(H(H(assetSell, assetBuy), assetFee), packed0), packed1)
+  const msgHash = computePedersenHash(
     computePedersenHash(
-      computePedersenHash(hexSell, hexBuy),
-      '0x1'   // assetIdFee
+      computePedersenHash(
+        computePedersenHash(hexSell, hexBuy),
+        '0x1'
+      ),
+      hexPack0
     ),
-    hexPack0
-  ),
-  hexPack1
-);
+    hexPack1
+  );
 
-  // ✅ Padding obligatoire à 32 bytes pour noble-curves
-const paddedHash = '0x' + msgHash.replace('0x', '').padStart(64, '0');
-const { r, s } = ec.starkCurve.sign(paddedHash, starkPrivateKey);
+  // Signer avec BigInt pour éviter tout problème de padding
+  const msgHashBigInt = BigInt(msgHash);
+  const sig = ec.starkCurve.sign(msgHashBigInt, starkPrivateKey);
+  const r = sig.r;
+  const s = sig.s;
+
   const payload = {
     id:                       generateOrderId(),
     market:                   order.extKey,
@@ -125,14 +127,9 @@ const { r, s } = ec.starkCurve.sign(paddedHash, starkPrivateKey);
 
   console.log('=== Extended Order Debug ===');
   console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', quoteAmount.toString(), '| feeAmount:', feeAmount.toString());
-console.log('expirationSecs:', expirationSecs.toString());
+  console.log('expirationSecs:', expirationSecs.toString());
   console.log('msgHash:', msgHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
-
-  console.log('assetIdSell:', assetIdSell, '| assetIdBuy:', assetIdBuy, '| assetIdFee: 0x1');
-console.log('amountSell:', amountSell.toString(), '| amountBuy:', amountBuy.toString());
-console.log('packed0:', packed0.toString(16));
-console.log('packed1:', packed1.toString(16));
 
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
@@ -169,7 +166,7 @@ export function usePlaceOrder() {
 
   const placeOrder = async (params) => {
     const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
-    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || '';
+    const freshL2Vault   = localStorage.getItem('ext_l2Vault')  || '';
     const freshExtApiKey = (() => {
       try {
         return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
