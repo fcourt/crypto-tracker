@@ -60,41 +60,37 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const amountSell  = isBuy ? quoteAmount : baseAmount;
   const amountBuy   = isBuy ? baseAmount  : quoteAmount;
 
-  // Expiration en HEURES (spec StarkEx perpetual)
-  const expirationHours = BigInt(
-    Math.ceil(expiryEpochMillis / 1000 / 3600) + Math.ceil(SERVER_CLOCK_OFFSET_S / 3600)
-  );
+  // Expiration : secondes dans packed1 (pas heures)
+const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
-  // packed0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32) = 224 bits
-  const packed0 =
-    (amountSell << 160n) |
-    (amountBuy  <<  96n) |
-    (feeAmount  <<  32n) |
-    BigInt(nonce);
+// packed0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
+const packed0 =
+  (amountSell << 160n) |
+  (amountBuy  <<  96n) |
+  (feeAmount  <<  32n) |
+  BigInt(nonce);
 
-  // packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
-  const packed1 =
-    (3n              << 241n) |
-    (BigInt(l2Vault) << 177n) |
-    (BigInt(l2Vault) << 113n) |
-    (BigInt(l2Vault) <<  49n) |
-    (expirationHours <<  17n);
+// packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
+const packed1 =
+  (3n              << 241n) |
+  (BigInt(l2Vault) << 177n) |
+  (BigInt(l2Vault) << 113n) |
+  (BigInt(l2Vault) <<  49n) |
+  (expirationSecs  <<  17n);
 
-  // Hash chain : H(H(H(H(assetSell, assetBuy), assetFee), packed0), packed1)
-  const { computePedersenHash } = hash;
-  const msgHash = computePedersenHash(
+const { computePedersenHash } = hash;
+const msgHash = computePedersenHash(
+  computePedersenHash(
     computePedersenHash(
-      computePedersenHash(
-        computePedersenHash(BigInt(assetIdSell), BigInt(assetIdBuy)),
-        1n
-      ),
-      packed0
+      computePedersenHash(BigInt(assetIdSell), BigInt(assetIdBuy)),
+      1n
     ),
-    packed1
-  );
+    packed0
+  ),
+  packed1
+);
 
-  const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
-
+const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
   const payload = {
     id:                       generateOrderId(),
     market:                   order.extKey,
