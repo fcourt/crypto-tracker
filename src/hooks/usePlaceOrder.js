@@ -2,6 +2,7 @@
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
+import { ec } from 'starknet';
 import { initWasm, getOrderMsgHash, sign as starkSign } from 'extended-typescript-sdk';
 
 const L2_CONFIGS = {
@@ -11,6 +12,8 @@ const L2_CONFIGS = {
 };
 
 const EXT_API_BASE = '/api/extended';
+
+let wasmInitialized = false;
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -54,39 +57,32 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const quoteAmount = BigInt(Math.round(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution));
   const feeAmount   = BigInt(Math.ceil(Number(quoteAmount) * 0.0005));
 
-  const assetIdSell = isBuy ? '0x1'       : syntheticId;
-  const assetIdBuy  = isBuy ? syntheticId : '0x1';
-  const amountSell  = isBuy ? quoteAmount : baseAmount;
-  const amountBuy   = isBuy ? baseAmount  : quoteAmount;
-
   const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600;
   const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
-  const packed0 =
-    (amountSell  << 160n) |
-    (amountBuy   <<  96n) |
-    (feeAmount   <<  32n) |
-    BigInt(nonce);
+  // ✅ WASM init une seule fois
+  if (!wasmInitialized) {
+    await initWasm();
+    wasmInitialized = true;
+  }
 
-  const packed1 =
-    (3n              << 245n) |
-    (BigInt(l2Vault) << 181n) |
-    (BigInt(l2Vault) << 117n) |
-    (BigInt(l2Vault) <<  85n) |
-    expirationSecs;
+  // ✅ quoteAmount négatif pour BUY, positif pour SELL
+  const signedQuoteAmount = isBuy ? (-quoteAmount).toString() : quoteAmount.toString();
 
-    const msgHash = hash.computePedersenHash(
-    hash.computePedersenHash(
-      hash.computePedersenHash(
-        hash.computePedersenHash(BigInt(assetIdSell), BigInt(assetIdBuy)),
-        1n
-      ),
-      packed0
-    ),
-    packed1
-  );
+  const orderHash = getOrderMsgHash({
+    positionId:   Number(l2Vault),
+    baseAssetId:  syntheticId,
+    baseAmount:   baseAmount.toString(),
+    quoteAssetId: '0x1',
+    quoteAmount:  signedQuoteAmount,
+    feeAssetId:   '0x1',
+    feeAmount:    feeAmount.toString(),
+    expiration:   expirationSecs.toString(),
+    salt:         nonce.toString(),
+  });
 
-  const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
+  // ✅ sign du SDK Extended, pas ec.starkCurve
+  const [r, s] = starkSign(BigInt(starkPrivateKey), BigInt(orderHash));
 
   const payload = {
     id:                       generateOrderId(),
@@ -112,9 +108,9 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   };
 
   console.log('=== Extended Order Debug ===');
-  console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', quoteAmount.toString(), '| feeAmount:', feeAmount.toString());
+  console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', signedQuoteAmount, '| feeAmount:', feeAmount.toString());
   console.log('expirationSecs:', expirationSecs.toString());
-  console.log('msgHash:', msgHash);
+  console.log('orderHash:', orderHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(
