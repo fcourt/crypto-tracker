@@ -97,7 +97,9 @@ const msgHash = computePedersenHash(
   hexPack1
 );
 
-const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
+  // ✅ Padding obligatoire à 32 bytes pour noble-curves
+const paddedHash = '0x' + msgHash.replace('0x', '').padStart(64, '0');
+const { r, s } = ec.starkCurve.sign(paddedHash, starkPrivateKey);
   const payload = {
     id:                       generateOrderId(),
     market:                   order.extKey,
