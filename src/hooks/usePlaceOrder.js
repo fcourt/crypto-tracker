@@ -79,15 +79,22 @@ const packed1 =
   (expirationSecs  <<  17n);
 
 const { computePedersenHash } = hash;
+
+// Conversion en hex strings pour starknet.js v6
+const hexSell  = '0x' + BigInt(assetIdSell).toString(16);
+const hexBuy   = '0x' + BigInt(assetIdBuy).toString(16);
+const hexPack0 = '0x' + packed0.toString(16);
+const hexPack1 = '0x' + packed1.toString(16);
+
 const msgHash = computePedersenHash(
   computePedersenHash(
     computePedersenHash(
-      computePedersenHash(BigInt(assetIdSell), BigInt(assetIdBuy)),
-      1n
+      computePedersenHash(hexSell, hexBuy),
+      '0x1'   // assetIdFee
     ),
-    packed0
+    hexPack0
   ),
-  packed1
+  hexPack1
 );
 
 const { r, s } = ec.starkCurve.sign(msgHash, starkPrivateKey);
