@@ -2,7 +2,7 @@
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ec, hash } from 'starknet';
+import { initWasm, getOrderMsgHash, sign as starkSign } from 'extended-typescript-sdk';
 
 const L2_CONFIGS = {
   'BTC-USD': { syntheticId: '0x4254432d3600000000000000000000', syntheticResolution: 1000000, collateralResolution: 1000000, szDecimals: 5, pxDecimals: 1 },
