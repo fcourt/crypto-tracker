@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import WalletInput from './components/WalletInput';
 import PlatformTabs from './components/PlatformTabs';
 import VolumeStats from './components/VolumeStats';
