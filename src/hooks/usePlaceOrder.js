@@ -2,16 +2,34 @@
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ec, hash } from 'starknet';
+import { ec, typedData } from 'starknet';
 
+// ─── Starknet field prime (pour encoder les montants négatifs en felt252) ──
+const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
+
+function toFelt(n) {
+  const bigN = BigInt(n);
+  return (bigN < 0n ? STARK_PRIME + bigN : bigN).toString();
+}
+
+// ─── L2 market configs (mainnet) ──────────────────────────────────────────
 const L2_CONFIGS = {
   'BTC-USD': { syntheticId: '0x4254432d3600000000000000000000', syntheticResolution: 1000000, collateralResolution: 1000000, szDecimals: 5, pxDecimals: 1 },
   'SOL-USD': { syntheticId: '0x534f4c2d3300000000000000000000', syntheticResolution: 1000,    collateralResolution: 1000000, szDecimals: 2, pxDecimals: 2 },
   'ETH-USD': { syntheticId: '0x4554482d3400000000000000000000', syntheticResolution: 10000,   collateralResolution: 1000000, szDecimals: 3, pxDecimals: 2 },
 };
 
-const EXT_API_BASE = '/api/extended';
-const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600;
+// ─── SNIP-12 domain (mainnet) ─────────────────────────────────────────────
+// Confirmé par Go SDK officiel (extended-protocol/extended-sdk-golang)
+const SNIP12_DOMAIN = {
+  name:     'Perpetuals',
+  version:  'v0',
+  chainId:  'SN_MAIN',
+  revision: '1',
+};
+
+const EXT_API_BASE         = '/api/extended';
+const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // confirmé : Go SDK HashOrder() ajoute 14 jours
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -27,6 +45,7 @@ function generateOrderId() {
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
+  const expirationSecs    = Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S;
 
   const orderType   = order.orderType ?? 'maker';
   const isMarket    = orderType === 'taker';
@@ -34,7 +53,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   const l2Config = L2_CONFIGS[order.extKey];
   if (!l2Config) throw new Error(`L2 config inconnue pour ${order.extKey}`);
-
   const { syntheticId, syntheticResolution, collateralResolution, szDecimals, pxDecimals } = l2Config;
 
   const aggressivePrice = isMarket
@@ -44,61 +62,68 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const sizeStr  = order.size.toFixed(szDecimals);
   const priceStr = aggressivePrice.toFixed(pxDecimals);
   const side     = order.isBuy ? 'BUY' : 'SELL';
-  const isBuy    = order.isBuy;
 
+  // ── Montants absolus (ceil si BUY, floor si SELL — Go SDK orders.go) ────
+  const syntheticAmountAbs  = order.isBuy
+    ? Math.ceil(parseFloat(sizeStr)  * syntheticResolution)
+    : Math.floor(parseFloat(sizeStr) * syntheticResolution);
+  const collateralAmountAbs = order.isBuy
+    ? Math.ceil(parseFloat(priceStr)  * parseFloat(sizeStr) * collateralResolution)
+    : Math.floor(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution);
+  const feeAmount = Math.ceil(collateralAmountAbs * 0.0005);
+
+  // ── Montants SIGNÉS (Go SDK) ──────────────────────────────────────────────
+  // BUY  → synthetic positif  / collateral NÉGATIF (tu paies le collateral)
+  // SELL → synthetic NÉGATIF  / collateral positif (tu reçois le collateral)
+  const syntheticAmount  = order.isBuy ?  syntheticAmountAbs  : -syntheticAmountAbs;
+  const collateralAmount = order.isBuy ? -collateralAmountAbs :  collateralAmountAbs;
+
+  // ── Starknet public key ───────────────────────────────────────────────────
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map(b => b.toString(16).padStart(2, '0')).join('');
 
-  const baseAmount  = BigInt(Math.round(parseFloat(sizeStr)  * syntheticResolution));
-  const quoteAmount = BigInt(Math.round(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution));
-  const feeAmount = (quoteAmount * 5n + 9999n) / 10000n;
-  const assetIdSell = isBuy ? '0x1'       : syntheticId;
-  const assetIdBuy  = isBuy ? syntheticId : '0x1';
-  const amountSell  = isBuy ? quoteAmount : baseAmount;
-  const amountBuy   = isBuy ? baseAmount  : quoteAmount;
+  // ── SNIP-12 typed data ────────────────────────────────────────────────────
+  // La starkKey est incluse dans le hash via getMessageHash(data, starkKey)
+  // Les montants négatifs sont encodés en felt252 via toFelt()
+  const orderTypedData = {
+    types: {
+      StarknetDomain: [
+        { name: 'name',     type: 'shortstring' },
+        { name: 'version',  type: 'shortstring' },
+        { name: 'chainId',  type: 'shortstring' },
+        { name: 'revision', type: 'shortstring' },
+      ],
+      Order: [
+        { name: 'positionId',   type: 'felt' },
+        { name: 'baseAssetId',  type: 'felt' },
+        { name: 'baseAmount',   type: 'felt' },
+        { name: 'quoteAssetId', type: 'felt' },
+        { name: 'quoteAmount',  type: 'felt' },
+        { name: 'feeAssetId',   type: 'felt' },
+        { name: 'feeAmount',    type: 'felt' },
+        { name: 'expiration',   type: 'felt' },
+        { name: 'salt',         type: 'felt' },
+      ],
+    },
+    primaryType: 'Order',
+    domain: SNIP12_DOMAIN,
+    message: {
+      positionId:   l2Vault.toString(),
+      baseAssetId:  syntheticId,               // toujours synthetic (base) en premier
+      baseAmount:   toFelt(syntheticAmount),   // signé → felt252
+      quoteAssetId: '0x1',                     // collateral (mainnet)
+      quoteAmount:  toFelt(collateralAmount),  // signé → felt252
+      feeAssetId:   '0x1',
+      feeAmount:    feeAmount.toString(),
+      expiration:   expirationSecs.toString(),
+      salt:         nonce.toString(),
+    },
+  };
 
-  const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
-
-  // ✅ APRÈS (spec StarkEx — 63 bits par champ, nonce 31 bits)
-  const packed0 =
-    (amountSell << 157n) |
-    (amountBuy  <<  94n) |
-    (feeAmount  <<  31n) |
-    BigInt(nonce);
-
-  // packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
-  const packed1 =
-    (3n              << 241n) |
-    (BigInt(l2Vault) << 177n) |
-    (BigInt(l2Vault) << 113n) |
-    (BigInt(l2Vault) <<  49n) |
-    (expirationSecs  <<  17n);
-
-  const { computePedersenHash } = hash;
-
-  const hexSell  = '0x' + BigInt(assetIdSell).toString(16);
-  const hexBuy   = '0x' + BigInt(assetIdBuy).toString(16);
-  const hexPack0 = '0x' + packed0.toString(16);
-  const hexPack1 = '0x' + packed1.toString(16);
-
-  // H(H(H(H(assetSell, assetBuy), assetFee), packed0), packed1)
-  const msgHash = computePedersenHash(
-    computePedersenHash(
-      computePedersenHash(
-        computePedersenHash(hexSell, hexBuy),
-        '0x1'
-      ),
-      hexPack0
-    ),
-    hexPack1
-  );
-
-  // Signer avec String
-  const sig = ec.starkCurve.sign(msgHash, starkPrivateKey);
-  const r = sig.r;
-  const s = sig.s;
+  // ── Hash SNIP-12 (Poseidon) + signature Stark ─────────────────────────────
+  const msgHash = typedData.getMessageHash(orderTypedData, starkKey);
+  const sig     = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
   const payload = {
     id:                       generateOrderId(),
@@ -115,24 +140,24 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     ...(order.reduceOnly && { reduceOnly: true }),
     settlement: {
       signature: {
-        r: '0x' + r.toString(16).padStart(64, '0'),
-        s: '0x' + s.toString(16).padStart(64, '0'),
+        r: '0x' + sig.r.toString(16).padStart(64, '0'),
+        s: '0x' + sig.s.toString(16).padStart(64, '0'),
       },
       starkKey,
-      collateralPosition: parseInt(l2Vault, 10),
+      collateralPosition: l2Vault.toString(), // string requis (Go SDK: fmt.Sprintf("%d", vault))
     },
   };
 
   console.log('=== Extended Order Debug ===');
-  console.log('baseAmount:', baseAmount.toString(), '| quoteAmount:', quoteAmount.toString(), '| feeAmount:', feeAmount.toString());
-  console.log('expirationSecs:', expirationSecs.toString());
-  console.log('msgHash:', msgHash);
+  console.log('syntheticAmount (signed):', syntheticAmount, '| collateralAmount (signed):', collateralAmount, '| feeAmount:', feeAmount);
+  console.log('expirationSecs:', expirationSecs);
+  console.log('msgHash (SNIP-12):', msgHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
     {
-      method: 'POST',
+      method:  'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Api-Key':    extApiKey,
@@ -158,13 +183,13 @@ export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
   const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
   const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
-  const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
+  const l2Vault         = localStorage.getItem('ext_l2_vault')     || ''; // ← clé unifiée
   const canTradeHL      = !!agentPrivateKey;
   const canTradeExt     = !!starkPrivateKey && !!l2Vault;
 
   const placeOrder = async (params) => {
     const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
-    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || '';
+    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || ''; // ← clé unifiée (était 'ext_l2Vault')
     const freshExtApiKey = (() => {
       try {
         return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
