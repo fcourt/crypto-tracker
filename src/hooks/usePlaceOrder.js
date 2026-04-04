@@ -61,11 +61,11 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   const expirationSecs = BigInt(Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S);
 
-  // packed0 : amountSell(64) | amountBuy(64) | feeAmount(64) | nonce(32)
+  // ✅ APRÈS (spec StarkEx — 63 bits par champ, nonce 31 bits)
   const packed0 =
-    (amountSell << 160n) |
-    (amountBuy  <<  96n) |
-    (feeAmount  <<  32n) |
+    (amountSell << 157n) |
+    (amountBuy  <<  94n) |
+    (feeAmount  <<  31n) |
     BigInt(nonce);
 
   // packed1 : type(10) | positionId(64) | positionId(64) | positionId(64) | expiration(32) | padding(17)
