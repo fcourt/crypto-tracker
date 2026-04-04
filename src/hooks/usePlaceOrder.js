@@ -24,7 +24,7 @@ const L2_CONFIGS = {
 const SNIP12_DOMAIN = {
   name:     'Perpetuals',
   version:  'v0',
-  chainId:  'SN_MAIN',
+  chainId:  '0x534e5f4d41494e',
   revision: '1',
 };
 
