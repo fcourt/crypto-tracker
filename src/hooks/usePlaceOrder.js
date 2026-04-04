@@ -13,13 +13,6 @@ const STARK_PRIME = BigInt('0x80000000000001100000000000000000000000000000000000
 const ORDER_SELECTOR  = '0x36da8d51815527cabfaa9c982f564c80fa7429616739306036f1f9b608dd112';
 const DOMAIN_SELECTOR = '0x1ff2f602e42168014d405a94f75e8a93d640751d71d16311266e140d8b0a210';
 
-// ─── L2 market configs (mainnet) ──────────────────────────────────────────
-const L2_CONFIGS = {
-  'BTC-USD': { syntheticId: '0x4254432d3600000000000000000000', syntheticResolution: 1000000, collateralResolution: 1000000, szDecimals: 5, pxDecimals: 1 },
-  'SOL-USD': { syntheticId: '0x534f4c2d3300000000000000000000', syntheticResolution: 1000,    collateralResolution: 1000000, szDecimals: 2, pxDecimals: 2 },
-  'ETH-USD': { syntheticId: '0x4554482d3400000000000000000000', syntheticResolution: 10000,   collateralResolution: 1000000, szDecimals: 3, pxDecimals: 2 },
-};
-
 const EXT_API_BASE          = '/api/extended';
 const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // confirmé dans HashOrder() du Go SDK
 
