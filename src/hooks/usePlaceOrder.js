@@ -79,6 +79,26 @@ function computeMessageHash(domainHash, starkKey, orderHash) {
   ]);
 }
 
+// ── Arithmétique entière exacte (zéro erreur IEEE 754) ────────────────────
+
+// Parse "0.000140" × 1000000 → 140 (sans float)
+function parseQuantum(valueStr, resolution) {
+  const resPow = Math.round(Math.log10(resolution));
+  const [intPart, decPart = ''] = String(valueStr).split('.');
+  const dec = decPart.padEnd(resPow, '0').slice(0, resPow);
+  return parseInt(intPart, 10) * resolution + (dec ? parseInt(dec, 10) : 0);
+}
+
+// collatAbs = syntheticAbs × price × (collatRes/synthRes) en entiers purs
+function parseCollateral(syntheticAbs, priceStr, collatRes, synthRes) {
+  const ratio     = collatRes / synthRes;                          // ex: 1 pour BTC, 1000 pour SOL
+  const extraDec  = ratio > 1 ? Math.round(Math.log10(ratio)) : 0; // nb décimales prix à garder
+  const [pInt, pDec = ''] = String(priceStr).split('.');
+  const pDecPadded = pDec.padEnd(extraDec, '0').slice(0, extraDec);
+  const priceInt   = parseInt(pInt, 10) * ratio + (extraDec > 0 && pDecPadded ? parseInt(pDecPadded, 10) : 0);
+  return syntheticAbs * priceInt;
+}
+
 // ─── Placement d'ordre Extended Exchange ─────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
    // ── Charge les configs marché dynamiquement ─────────────────────────────
@@ -104,12 +124,8 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const priceStr = aggressivePrice.toFixed(pxDecimals);
 
   // ── Montants absolus (ceil si BUY, floor si SELL — Go SDK orders.go) ────
-  const syntheticAmountAbs  = order.isBuy
-    ? Math.ceil(parseFloat(sizeStr)  * syntheticResolution)
-    : Math.floor(parseFloat(sizeStr) * syntheticResolution);
-  const collateralAmountAbs = order.isBuy
-    ? Math.ceil(parseFloat(priceStr)  * parseFloat(sizeStr) * collateralResolution)
-    : Math.floor(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution);
+  const syntheticAmountAbs  = parseQuantum(sizeStr, syntheticResolution);
+  const collateralAmountAbs = parseCollateral(syntheticAmountAbs, priceStr, collateralResolution, syntheticResolution);
   const feeAmount = Math.ceil(collateralAmountAbs * 0.0005);
 
   // ── Montants SIGNÉS (Rust i64) ────────────────────────────────────────────
