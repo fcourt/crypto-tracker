@@ -85,6 +85,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const L2_CONFIGS = await loadExtendedL2Configs();
   const l2Config   = L2_CONFIGS[order.extKey];
   if (!l2Config) throw new Error(`Marché non supporté par Extended : ${order.extKey}`);
+  const { syntheticId, syntheticResolution, collateralResolution, szDecimals, pxDecimals } = l2Config;
   
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
@@ -94,10 +95,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   const orderType   = order.orderType ?? 'maker';
   const isMarket    = orderType === 'taker';
   const timeInForce = isMarket ? 'IOC' : 'GTT';
-
-  const l2Config = L2_CONFIGS[order.extKey];
-  if (!l2Config) throw new Error(`L2 config inconnue pour ${order.extKey}`);
-  const { syntheticId, syntheticResolution, collateralResolution, szDecimals, pxDecimals } = l2Config;
 
   const aggressivePrice = isMarket
     ? (order.isBuy ? order.limitPrice * 1.0075 : order.limitPrice * 0.9925)
