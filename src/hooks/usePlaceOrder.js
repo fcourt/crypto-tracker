@@ -53,8 +53,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   const baseAmount  = BigInt(Math.round(parseFloat(sizeStr)  * syntheticResolution));
   const quoteAmount = BigInt(Math.round(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution));
-  const feeAmount   = BigInt(Math.ceil(Number(quoteAmount) * 0.0005));
-
+  const feeAmount = (quoteAmount * 5n + 9999n) / 10000n;
   const assetIdSell = isBuy ? '0x1'       : syntheticId;
   const assetIdBuy  = isBuy ? syntheticId : '0x1';
   const amountSell  = isBuy ? quoteAmount : baseAmount;
@@ -96,9 +95,8 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     hexPack1
   );
 
-  // Signer avec BigInt pour éviter tout problème de padding
-  const msgHashBigInt = BigInt(msgHash);
-  const sig = ec.starkCurve.sign(msgHashBigInt, starkPrivateKey);
+  // Signer avec String
+  const sig = ec.starkCurve.sign(msgHash, starkPrivateKey);
   const r = sig.r;
   const s = sig.s;
 
@@ -121,7 +119,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
         s: '0x' + s.toString(16).padStart(64, '0'),
       },
       starkKey,
-      collateralPosition: l2Vault.toString(),
+      collateralPosition: parseInt(l2Vault, 10),
     },
   };
 
@@ -166,7 +164,7 @@ export function usePlaceOrder() {
 
   const placeOrder = async (params) => {
     const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
-    const freshL2Vault   = localStorage.getItem('ext_l2Vault')  || '';
+    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || '';
     const freshExtApiKey = (() => {
       try {
         return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
