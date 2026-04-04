@@ -2,15 +2,15 @@
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { ec, typedData } from 'starknet';
+import { ec, hash, shortString } from 'starknet';
 
-// ─── Starknet field prime (pour encoder les montants négatifs en felt252) ──
+// ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
 
-function toFelt(n) {
-  const bigN = BigInt(n);
-  return (bigN < 0n ? STARK_PRIME + bigN : bigN).toString();
-}
+// ─── SELECTORs confirmés par les tests unitaires Rust du SDK officiel ─────
+// https://github.com/x10xchange/rust-crypto-lib-base/blob/master/src/starknet_messages.rs
+const ORDER_SELECTOR  = '0x36da8d51815527cabfaa9c982f564c80fa7429616739306036f1f9b608dd112';
+const DOMAIN_SELECTOR = '0x1ff2f602e42168014d405a94f75e8a93d640751d71d16311266e140d8b0a210';
 
 // ─── L2 market configs (mainnet) ──────────────────────────────────────────
 const L2_CONFIGS = {
@@ -19,17 +19,8 @@ const L2_CONFIGS = {
   'ETH-USD': { syntheticId: '0x4554482d3400000000000000000000', syntheticResolution: 10000,   collateralResolution: 1000000, szDecimals: 3, pxDecimals: 2 },
 };
 
-// ─── SNIP-12 domain (mainnet) ─────────────────────────────────────────────
-// Confirmé par Go SDK officiel (extended-protocol/extended-sdk-golang)
-const SNIP12_DOMAIN = {
-  name:     'Perpetuals',
-  version:  'v0',
-  chainId:  '0x534e5f4d41494e',
-  revision: '1',
-};
-
-const EXT_API_BASE         = '/api/extended';
-const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // confirmé : Go SDK HashOrder() ajoute 14 jours
+const EXT_API_BASE          = '/api/extended';
+const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600; // confirmé dans HashOrder() du Go SDK
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -42,9 +33,63 @@ function generateOrderId() {
   });
 }
 
+// Convertit un entier signé (i64) en felt252 (two's complement dans F_p)
+function signedToFelt252(n) {
+  const big = BigInt(n);
+  return '0x' + (big < 0n ? STARK_PRIME + big : big).toString(16);
+}
+
+// Convertit un entier non signé (u32/u64) en felt252
+function uintToFelt252(n) {
+  return '0x' + BigInt(n).toString(16);
+}
+
+// ─── Hash Poseidon du domaine SNIP-12 ─────────────────────────────────────
+// Correspond exactement à StarknetDomain::hash() dans starknet_messages.rs
+function computeDomainHash(name, version, chainId, revision) {
+  return hash.computePoseidonHashOnElements([
+    DOMAIN_SELECTOR,
+    shortString.encodeShortString(name),    // cairo_short_string_to_felt("Perpetuals")
+    shortString.encodeShortString(version), // cairo_short_string_to_felt("v0")
+    shortString.encodeShortString(chainId), // cairo_short_string_to_felt("SN_MAIN")
+    uintToFelt252(revision),                // u32 → felt (valeur numérique, pas short string !)
+  ]);
+}
+
+// ─── Hash Poseidon de l'ordre ─────────────────────────────────────────────
+// Correspond exactement à Order::hash() dans starknet_messages.rs
+function computeOrderHash(positionId, baseAssetId, baseAmount, quoteAssetId,
+                           quoteAmount, feeAssetId, feeAmount, expiration, salt) {
+  return hash.computePoseidonHashOnElements([
+    ORDER_SELECTOR,
+    uintToFelt252(positionId),   // u32 → felt
+    baseAssetId,                 // felt hex direct (ex: "0x534f4c2d...")
+    signedToFelt252(baseAmount), // i64 signé → felt252  (+250 pour BUY)
+    quoteAssetId,                // felt hex direct (= "0x1")
+    signedToFelt252(quoteAmount),// i64 signé → felt252  (-20190000 pour BUY)
+    feeAssetId,                  // felt hex direct (= "0x1")
+    uintToFelt252(feeAmount),    // u64 → felt
+    uintToFelt252(expiration),   // u64 → felt (secondes Unix)
+    uintToFelt252(salt),         // u64 → felt (nonce)
+  ]);
+}
+
+// ─── Hash Poseidon du message complet ─────────────────────────────────────
+// Correspond à OffChainMessage::message_hash() dans starknet_messages.rs
+function computeMessageHash(domainHash, starkKey, orderHash) {
+  return hash.computePoseidonHashOnElements([
+    shortString.encodeShortString('StarkNet Message'), // MESSAGE_FELT
+    domainHash,
+    starkKey,   // public_key as felt hex
+    orderHash,
+  ]);
+}
+
+// ─── Placement d'ordre Extended Exchange ─────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
+  // +14 jours : confirmé dans Go SDK HashOrder() → expireTimeWithBuffer
   const expirationSecs    = Math.ceil(expiryEpochMillis / 1000) + SERVER_CLOCK_OFFSET_S;
 
   const orderType   = order.orderType ?? 'maker';
@@ -61,7 +106,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 
   const sizeStr  = order.size.toFixed(szDecimals);
   const priceStr = aggressivePrice.toFixed(pxDecimals);
-  const side     = order.isBuy ? 'BUY' : 'SELL';
 
   // ── Montants absolus (ceil si BUY, floor si SELL — Go SDK orders.go) ────
   const syntheticAmountAbs  = order.isBuy
@@ -72,64 +116,40 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     : Math.floor(parseFloat(priceStr) * parseFloat(sizeStr) * collateralResolution);
   const feeAmount = Math.ceil(collateralAmountAbs * 0.0005);
 
-  // ── Montants SIGNÉS (Go SDK) ──────────────────────────────────────────────
-  // BUY  → synthetic positif  / collateral NÉGATIF (tu paies le collateral)
-  // SELL → synthetic NÉGATIF  / collateral positif (tu reçois le collateral)
-  const syntheticAmount  = order.isBuy ?  syntheticAmountAbs  : -syntheticAmountAbs;
-  const collateralAmount = order.isBuy ? -collateralAmountAbs :  collateralAmountAbs;
+  // ── Montants SIGNÉS (Rust i64) ────────────────────────────────────────────
+  // BUY  → base (synthetic) POSITIF  / quote (collateral) NÉGATIF
+  // SELL → base (synthetic) NÉGATIF  / quote (collateral) POSITIF
+  const baseAmount  = order.isBuy ?  syntheticAmountAbs  : -syntheticAmountAbs;
+  const quoteAmount = order.isBuy ? -collateralAmountAbs :  collateralAmountAbs;
 
   // ── Starknet public key ───────────────────────────────────────────────────
   const pubKeyBytes = ec.starkCurve.getPublicKey(starkPrivateKey, true);
   const starkKey    = '0x' + Array.from(pubKeyBytes.slice(1))
     .map(b => b.toString(16).padStart(2, '0')).join('');
 
-  // ── SNIP-12 typed data ────────────────────────────────────────────────────
-  // La starkKey est incluse dans le hash via getMessageHash(data, starkKey)
-  // Les montants négatifs sont encodés en felt252 via toFelt()
-  const orderTypedData = {
-    types: {
-      StarknetDomain: [
-        { name: 'name',     type: 'shortstring' },
-        { name: 'version',  type: 'shortstring' },
-        { name: 'chainId',  type: 'shortstring' },
-        { name: 'revision', type: 'shortstring' },
-      ],
-      Order: [
-        { name: 'positionId',   type: 'felt' },
-        { name: 'baseAssetId',  type: 'felt' },
-        { name: 'baseAmount',   type: 'felt' },
-        { name: 'quoteAssetId', type: 'felt' },
-        { name: 'quoteAmount',  type: 'felt' },
-        { name: 'feeAssetId',   type: 'felt' },
-        { name: 'feeAmount',    type: 'felt' },
-        { name: 'expiration',   type: 'felt' },
-        { name: 'salt',         type: 'felt' },
-      ],
-    },
-    primaryType: 'Order',
-    domain: SNIP12_DOMAIN,
-    message: {
-      positionId:   l2Vault.toString(),
-      baseAssetId:  syntheticId,               // toujours synthetic (base) en premier
-      baseAmount:   toFelt(syntheticAmount),   // signé → felt252
-      quoteAssetId: '0x1',                     // collateral (mainnet)
-      quoteAmount:  toFelt(collateralAmount),  // signé → felt252
-      feeAssetId:   '0x1',
-      feeAmount:    feeAmount.toString(),
-      expiration:   expirationSecs.toString(),
-      salt:         nonce.toString(),
-    },
-  };
+  // ── Calcul du hash SNIP-12 (Poseidon plat, sans récursion de structs) ────
+  const domainHash = computeDomainHash('Perpetuals', 'v0', 'SN_MAIN', 1);
+  const orderHash  = computeOrderHash(
+    parseInt(l2Vault, 10),  // positionId : u32
+    syntheticId,             // baseAssetId
+    baseAmount,              // baseAmount  : i64 signé
+    '0x1',                   // quoteAssetId : collateral
+    quoteAmount,             // quoteAmount : i64 signé
+    '0x1',                   // feeAssetId  : collateral
+    feeAmount,               // feeAmount   : u64
+    expirationSecs,          // expiration  : u64 secondes
+    nonce,                   // salt        : u64
+  );
+  const msgHash = computeMessageHash(domainHash, starkKey, orderHash);
 
-  // ── Hash SNIP-12 (Poseidon) + signature Stark ─────────────────────────────
-  const msgHash = typedData.getMessageHash(orderTypedData, starkKey);
-  const sig     = ec.starkCurve.sign(msgHash, starkPrivateKey);
+  // ── Signature Stark ───────────────────────────────────────────────────────
+  const sig = ec.starkCurve.sign(msgHash, starkPrivateKey);
 
   const payload = {
     id:                       generateOrderId(),
     market:                   order.extKey,
     type:                     'LIMIT',
-    side,
+    side:                     order.isBuy ? 'BUY' : 'SELL',
     qty:                      sizeStr,
     price:                    priceStr,
     timeInForce,
@@ -144,14 +164,16 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
         s: '0x' + sig.s.toString(16).padStart(64, '0'),
       },
       starkKey,
-      collateralPosition: l2Vault.toString(), // string requis (Go SDK: fmt.Sprintf("%d", vault))
+      collateralPosition: l2Vault.toString(), // STRING requis (Go SDK: fmt.Sprintf)
     },
   };
 
   console.log('=== Extended Order Debug ===');
-  console.log('syntheticAmount (signed):', syntheticAmount, '| collateralAmount (signed):', collateralAmount, '| feeAmount:', feeAmount);
-  console.log('expirationSecs:', expirationSecs);
-  console.log('msgHash (SNIP-12):', msgHash);
+  console.log('baseAmount (signed):', baseAmount, '| quoteAmount (signed):', quoteAmount, '| feeAmount:', feeAmount);
+  console.log('expirationSecs:', expirationSecs, '| nonce:', nonce);
+  console.log('domainHash:', domainHash);
+  console.log('orderHash:', orderHash);
+  console.log('msgHash:', msgHash);
   console.log('payload:', JSON.stringify(payload, null, 2));
 
   const res = await fetch(
@@ -179,17 +201,18 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
   return data;
 }
 
+// ─── Hook principal ───────────────────────────────────────────────────────
 export function usePlaceOrder() {
   const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
   const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
   const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
-  const l2Vault         = localStorage.getItem('ext_l2_vault')     || ''; // ← clé unifiée
+  const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
   const canTradeHL      = !!agentPrivateKey;
   const canTradeExt     = !!starkPrivateKey && !!l2Vault;
 
   const placeOrder = async (params) => {
     const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
-    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || ''; // ← clé unifiée (était 'ext_l2Vault')
+    const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || ''; // clé unifiée
     const freshExtApiKey = (() => {
       try {
         return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || '';
