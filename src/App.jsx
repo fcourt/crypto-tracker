@@ -10,6 +10,7 @@ import PerpDexPage from './pages/PerpDexPage';
 import DeltaNeutralPage from './pages/DeltaNeutralPage';
 import { useHyperliquidFills } from './hooks/useHyperliquidFills';
 import { getPlatform, filterByPlatform, computeStats } from './utils/platformFilter';
+import { loadExtendedL2Configs } from './hooks/useExtendedL2Config';
 
 const TABS = [
   { id: 'hyperliquid', label: '⚡ Hyperliquid' },
@@ -23,6 +24,10 @@ export default function App() {
   const [activeTab, setActiveTab]         = useState('hyperliquid');
   const [activePlatform, setActivePlatform] = useState('all');
   const [walletAddress, setWalletAddress] = useState('');
+
+  useEffect(() => {
+  loadExtendedL2Configs().catch(console.warn); // précharge en arrière-plan
+  }, []);
 
   const filteredFills = useMemo(() =>
     filterByPlatform(fills, activePlatform), [fills, activePlatform]);
