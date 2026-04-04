@@ -3,6 +3,7 @@
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
+import { loadExtendedL2Configs } from './useExtendedL2Config';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -87,6 +88,11 @@ function computeMessageHash(domainHash, starkKey, orderHash) {
 
 // ─── Placement d'ordre Extended Exchange ─────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
+   // ── Charge les configs marché dynamiquement ─────────────────────────────
+  const L2_CONFIGS = await loadExtendedL2Configs();
+  const l2Config   = L2_CONFIGS[order.extKey];
+  if (!l2Config) throw new Error(`Marché non supporté par Extended : ${order.extKey}`);
+  
   const nonce             = generateNonce();
   const expiryEpochMillis = Date.now() + 3600 * 1000;
   // +14 jours : confirmé dans Go SDK HashOrder() → expireTimeWithBuffer
