@@ -55,11 +55,13 @@ export function useHLMeta() {
   }, []);
 
   const getAssetMeta = useCallback((hlKey) => {
-    if (!hlKey) return null;
-    // Retire les préfixes xyz: et hyna: avant de chercher dans la meta
-    const key = hlKey.replace(/^(xyz:|hyna:)/, '');
-    return assetMap[key] ?? null;
-  }, [assetMap]);
+  if (!hlKey) return null;
+  // Essai 1 : clé exacte (ex: 'xyz:GOLD')
+  if (assetMap[hlKey]) return assetMap[hlKey];
+  // Essai 2 : sans préfixe (ex: 'GOLD')
+  const stripped = hlKey.replace(/^(xyz:|hyna:)/, '');
+  return assetMap[stripped] ?? null;
+}, [assetMap]);
 
   return { assetMap, getAssetMeta };
 }
