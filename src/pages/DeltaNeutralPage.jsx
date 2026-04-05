@@ -11,6 +11,51 @@ import FeeConfigPanel    from '../components/delta-neutral/FeeConfigPanel';
 import OpenTradeSection  from '../components/delta-neutral/OpenTradeSection';
 import OpenTradesPanel   from '../components/delta-neutral/OpenTradesPanel';
 
+// Ajouter cette fonction en haut du composant (ou dans dnHelpers.js)
+function roundToTickSize(price, tickSize) {
+  if (!tickSize || tickSize <= 0) return price;
+  const inverse = 1 / tickSize;
+  return Math.round(price * inverse) / inverse;
+}
+
+const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
+  const hlKey      = market?.hlKey;
+  const meta       = getAssetMeta(hlKey);
+
+  // ← Récupérer le tickSize depuis la meta
+  const tickSize   = meta?.tickSize;
+  const szStep     = meta?.szDecimals != null ? Math.pow(10, -meta.szDecimals) : null;
+
+  const szDecimals = platformId === 'extended'
+    ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
+    : (meta?.szDecimals ?? 6);
+
+  const pxDecimals = platformId === 'extended'
+    ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
+    : (meta?.pxDecimals ?? 2);
+
+  // ← Prix arrondi au tick size exact pour HL
+  const roundedPrice = platformId !== 'extended' && tickSize
+    ? roundToTickSize(limitPrice, tickSize)
+    : limitPrice;
+
+  // ← Size arrondie au step size exact pour HL
+  const rawSize = useStepSize && getStepSize(marketId)
+    ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
+    : sizeAsset;
+  const roundedSize = szStep
+    ? Math.floor(rawSize / szStep) * szStep
+    : rawSize;
+
+  return {
+    platformId, hlKey, extKey: market?.extKey, assetIndex: meta?.index ?? 0,
+    isBuy:      side === 'LONG',
+    size:       roundedSize,
+    limitPrice: roundedPrice,
+    szDecimals, pxDecimals, orderType, reduceOnly,
+  };
+};
+
 function PriceDot({ fresh }) {
   return <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${fresh ? 'bg-green-400' : 'bg-yellow-500'}`} />;
 }
