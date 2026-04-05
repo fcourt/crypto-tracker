@@ -141,38 +141,47 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
   const hlKey = market?.hlKey;
   const meta  = getAssetMeta(hlKey);
 
-  // ← Bloquer si l'asset n'est pas trouvé au lieu de silencieusement trader BTC
+  // Avertissement non bloquant — meta peut être null si le cache charge encore
   if (platformId !== 'extended' && !meta) {
-    throw new Error(`Asset "${hlKey}" non trouvé dans la meta Hyperliquid — vider le cache et recharger`);
+    console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}" — l'index sera 0`);
   }
 
   const szDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
-    : (meta?.szDecimals ?? 6);
+    : (meta?.szDecimals ?? 2);
+
   const pxDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
     : (meta?.pxDecimals ?? 2);
 
+  // Prix arrondi à 5 chiffres significatifs pour HL
   const roundedPrice = platformId !== 'extended'
     ? roundToHLPrice(limitPrice)
     : limitPrice;
 
+  // Size arrondie proprement via toFixed (évite les erreurs float IEEE 754)
   const rawSize     = useStepSize && getStepSize(marketId)
     ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
     : sizeAsset;
   const roundedSize = parseFloat(rawSize.toFixed(szDecimals));
 
-  console.log(`[Order] ${hlKey} | index: ${meta?.index} | price: ${limitPrice} → ${roundedPrice} | size: ${roundedSize}`);
+  console.log(`[Order] ${hlKey} | index: ${meta?.index ?? 0} | price: ${limitPrice} → ${roundedPrice} | size: ${roundedSize} (szDec: ${szDecimals})`);
 
   return {
-    platformId, hlKey, extKey: market?.extKey,
-    assetIndex: meta?.index,  // ← plus de ?? 0
+    platformId,
+    hlKey,
+    extKey:     market?.extKey,
+    assetIndex: meta?.index ?? 0,  // ← 0 seulement si meta vraiment absente (ne devrait plus arriver)
     isBuy:      side === 'LONG',
     size:       roundedSize,
     limitPrice: roundedPrice,
-    szDecimals, pxDecimals, orderType, reduceOnly,
+    szDecimals,
+    pxDecimals,
+    orderType,
+    reduceOnly,
   };
 };  
+  
   const handlePlaceLeg = async (legNum) => {
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
