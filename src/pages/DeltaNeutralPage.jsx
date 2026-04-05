@@ -314,7 +314,7 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange, onVa
             <button
               onClick={() => {
                 if (!confirm('Effacer toutes les clés sauvegardées ?')) return;
-                ['hl_address','hl_agent_pk','hl_vault_address','ext_stark_pk','ext_l2_vault','extended_api_keys'].forEach(k => localStorage.removeItem(k));
+                ['hl_address','hl_agent_pk','hl_vault_address','ext_stark_pk','ext_l2_vault','extended_api_keys', 'ext_api_key'].forEach(k => localStorage.removeItem(k));
                 onHlChange(''); onExtChange(''); saveHlAgentPk(''); saveHlVaultAddress(''); saveExtStarkPk(''); saveExtL2Vault('');
               }}
               className="w-full bg-red-900/30 hover:bg-red-800/50 border border-red-700 text-red-400 text-xs font-medium py-2 rounded-lg transition-colors"
@@ -897,12 +897,15 @@ export default function DeltaNeutralPage() {
 
   const [hlAddress, setHlAddress] = useState(() => localStorage.getItem('hl_address') || '');
   const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address') || '');
-  const [extApiKey, setExtApiKey] = useState(() => getExtendedApiKeys()[0]?.apiKey || '');
-
+  const [extApiKey, setExtApiKey] = useState( () => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || '');
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
   const saveHlAddress = (addr) => { setHlAddress(addr); localStorage.setItem('hl_address', addr); };
-  const saveExtKey    = (key)  => { setExtApiKey(key);  saveExtendedApiKey(key, 'Delta Neutral'); };
+  const saveExtKey = (key) => {
+    setExtApiKey(key);
+    localStorage.setItem('ext_api_key', key);        // ← simple, fiable, comme les autres clés
+    saveExtendedApiKey(key, 'Delta Neutral');         // ← garde la compatibilité avec les autres pages
+  };
 
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
   const marginAddress = hlVaultAddress || hlAddress;
