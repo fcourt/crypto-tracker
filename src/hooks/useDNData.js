@@ -62,7 +62,7 @@ async function fetchExtPositions(apiKey) {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-export function useHLMargin(address) {
+/*export function useHLMargin(address) {
   const [margin, setMargin] = useState(null);
   useEffect(() => {
     if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
@@ -85,6 +85,43 @@ export function useHLMargin(address) {
     return () => clearInterval(t);
   }, [address]);
   return margin;
+}*/
+
+// Remplacer useHLMargin par cette version
+export function useHLMargin(mainAddress, vaultAddress) {
+  const [margin, setMargin] = useState(null);
+
+  // Résolution de l'adresse effective à l'intérieur du hook
+  const effectiveAddress = useMemo(() => {
+    const vault = vaultAddress?.trim();
+    const main  = mainAddress?.trim();
+    if (vault && /^0x[0-9a-fA-F]{40}$/.test(vault)) return vault;
+    if (main  && /^0x[0-9a-fA-F]{40}$/.test(main))  return main;
+    return null;
+  }, [mainAddress, vaultAddress]);
+
+  useEffect(() => {
+    if (!effectiveAddress) return;
+    const run = async () => {
+      try {
+        const res   = await fetch(HL_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'clearinghouseState', user: effectiveAddress }),
+        });
+        const state = await res.json();
+        setMargin(
+          parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
+          parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
+        );
+      } catch { setMargin(null); }
+    };
+    run();
+    const t = setInterval(run, 15000);
+    return () => clearInterval(t);
+  }, [effectiveAddress]);
+
+  return { margin, effectiveAddress };
 }
 
 export function useExtMargin(apiKey) {
