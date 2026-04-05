@@ -138,49 +138,60 @@ export default function DeltaNeutralPage() {
 
   // buildOrderParams reste ICI dans le composant
 const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
-  const hlKey = market?.hlKey;
-  const meta  = getAssetMeta(hlKey);
+  const hlKey  = market?.hlKey;
+  const meta   = getAssetMeta(hlKey);
 
-  // Avertissement non bloquant — meta peut être null si le cache charge encore
   if (platformId !== 'extended' && !meta) {
-    console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}" — l'index sera 0`);
+    console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}"`);
   }
 
+  // ── Décimales pour la size ─────────────────────────────────────────────
+  // Priorité : meta API → dérivé du step size → fallback 6
+  const stepSize = platformId !== 'extended' ? getStepSize(marketId) : null;
+  const szDecimalsFromStep = stepSize && stepSize > 0
+    ? Math.round(-Math.log10(stepSize))   // ex: stepSize=0.0001 → 4
+    : null;
   const szDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
-    : (meta?.szDecimals ?? 2);
+    : (meta?.szDecimals ?? szDecimalsFromStep ?? 6);
 
+  // ── Décimales pour le prix ────────────────────────────────────────────
   const pxDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
     : (meta?.pxDecimals ?? 2);
 
-  // Prix arrondi à 5 chiffres significatifs pour HL
+  // ── Prix arrondi à 5 chiffres significatifs pour HL ───────────────────
   const roundedPrice = platformId !== 'extended'
     ? roundToHLPrice(limitPrice)
     : limitPrice;
 
-  // Size arrondie proprement via toFixed (évite les erreurs float IEEE 754)
-  const rawSize     = useStepSize && getStepSize(marketId)
-    ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
+  // ── Size arrondie proprement ──────────────────────────────────────────
+  const rawSize     = useStepSize && stepSize
+    ? Math.floor(sizeAsset / stepSize) * stepSize
     : sizeAsset;
   const roundedSize = parseFloat(rawSize.toFixed(szDecimals));
 
-  console.log(`[Order] ${hlKey} | index: ${meta?.index ?? 0} | price: ${limitPrice} → ${roundedPrice} | size: ${roundedSize} (szDec: ${szDecimals})`);
+  // Sécurité : si après arrondi la size est 0, utiliser la size brute arrondie au minimum
+  const finalSize = roundedSize > 0
+    ? roundedSize
+    : parseFloat(sizeAsset.toFixed(szDecimalsFromStep ?? 8));
+
+  console.log(`[Order] ${hlKey} | index: ${meta?.index ?? 0} | szDec: ${szDecimals} (step: ${stepSize}) | price: ${limitPrice} → ${roundedPrice} | size: ${sizeAsset} → ${finalSize}`);
 
   return {
     platformId,
     hlKey,
     extKey:     market?.extKey,
-    assetIndex: meta?.index ?? 0,  // ← 0 seulement si meta vraiment absente (ne devrait plus arriver)
+    assetIndex: meta?.index ?? 0,
     isBuy:      side === 'LONG',
-    size:       roundedSize,
+    size:       finalSize,
     limitPrice: roundedPrice,
     szDecimals,
     pxDecimals,
     orderType,
     reduceOnly,
   };
-};  
+};
   
   const handlePlaceLeg = async (legNum) => {
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
