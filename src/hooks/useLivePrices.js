@@ -76,27 +76,42 @@ async function fetchHLMids() {
 
   const prices    = {};
   const stepSizes = {};
+  const assetMeta = {}; // ← nouveau
 
-  // Perps natifs HL (crypto)
   const [nativeMeta, nativeCtxs] = Array.isArray(nativeData) ? nativeData : [null, null];
-  (nativeMeta?.universe || []).forEach((asset, i) => {
-    if (nativeCtxs?.[i]?.markPx) {
-      prices[asset.name]    = nativeCtxs[i].markPx;
+  (nativeMeta?.universe || []).forEach((asset, index) => {
+    if (nativeCtxs?.[index]?.markPx) {
+      prices[asset.name]    = nativeCtxs[index].markPx;
       stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 3));
     }
+    assetMeta[asset.name] = {           // ← même si pas de prix
+      index,
+      szDecimals:  asset.szDecimals  ?? 6,
+      pxDecimals:  asset.pxDecimals  ?? 2,
+      maxLeverage: asset.maxLeverage ?? null,
+    };
   });
 
-  // Marchés HIP-3 trade.xyz (asset.name est déjà "xyz:TSLA" etc.)
   const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
-  (xyzMeta?.universe || []).forEach((asset, i) => {
-    if (xyzCtxs?.[i]?.markPx) {
-      prices[asset.name]    = xyzCtxs[i].markPx;
+  (xyzMeta?.universe || []).forEach((asset, index) => {
+    if (xyzCtxs?.[index]?.markPx) {
+      prices[asset.name]    = xyzCtxs[index].markPx;
       stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 2));
     }
+    const entry = {
+      index,
+      szDecimals:  asset.szDecimals  ?? 2,
+      pxDecimals:  asset.pxDecimals  ?? 2,
+      maxLeverage: asset.maxLeverage ?? null,
+    };
+    assetMeta[asset.name] = entry;                           // 'xyz:GOLD'
+    const stripped = asset.name.replace(/^xyz:/, '');
+    if (stripped !== asset.name) assetMeta[stripped] = entry; // 'GOLD' aussi
   });
 
-  return { prices, stepSizes };
+  return { prices, stepSizes, assetMeta };
 }
+
 
 // ─── Fetch Extended : prix ────────────────────────────────────────────────────
 
@@ -130,6 +145,7 @@ async function fetchExtMids() {
 export function useLivePrices(intervalMs = 3000) {
   const [hlMids,     setHlMids]     = useState({});
   const [hlSteps,    setHlSteps]    = useState({});
+  const [hlAssetMeta,  setHlAssetMeta]  = useState({}); // ← nouveau
   const [extMids,    setExtMids]    = useState({});
   const [extPrecisions, setExtPrecisions] = useState({}); 
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -142,6 +158,7 @@ export function useLivePrices(intervalMs = 3000) {
   ]);
   setHlMids(prices        || {});
   setHlSteps(stepSizes    || {});
+  setHlAssetMeta(assetMeta || {}); // ← nouveau
   setExtMids(priceMap      || {});
   setExtPrecisions(precisionMap || {}); // 👈
   setLastUpdate(new Date());
@@ -155,6 +172,15 @@ export function useLivePrices(intervalMs = 3000) {
     return () => clearInterval(timer.current);
   }, []);
 
+  const getAssetMeta = useCallback((hlKey) => { // ← nouveau
+    if (!hlKey) return null;
+    if (hlAssetMeta[hlKey]) return hlAssetMeta[hlKey];
+    const stripped = hlKey.replace(/^(xyz:|hyna:)/, '');
+    return hlAssetMeta[stripped] ?? null;
+  }, [hlAssetMeta]);
+
+  const getExtPrecision = (extKey) => extPrecisions[extKey] ?? { szDecimals: 2, pxDecimals: 2 };
+  
   const getPrice = (marketId, platformId) => {
     const market = MARKETS.find(m => m.id === marketId);
     if (!market) return null;
@@ -175,5 +201,5 @@ export function useLivePrices(intervalMs = 3000) {
     return hlSteps[market.hlKey] ?? 0.01;
   };
 
-  return { getPrice, getStepSize, hlMids, extMids, lastUpdate, getExtPrecision };
+  return { getPrice, getStepSize, getAssetMeta, hlMids, extMids, lastUpdate, getExtPrecision };
 }
