@@ -2,13 +2,13 @@ import { useState } from 'react';
 
 export default function WalletConfigPanel({
   hlAddress, onHlChange,
+  hlVaultAddress, onVaultChange,  // ← hlVaultAddress est maintenant une prop
   extApiKey, onExtChange,
-  onVaultChange,
 }) {
   const [open, setOpen] = useState(!hlAddress && !extApiKey);
 
   const [hlAgentPk,      setHlAgentPk]      = useState(() => localStorage.getItem('hl_agent_pk')      || '');
-  const [hlVaultAddress, setHlVaultAddress]  = useState(() => localStorage.getItem('hl_vault_address') || '');
+  //const [hlVaultAddress, setHlVaultAddress]  = useState(() => localStorage.getItem('hl_vault_address') || '');
   const [extStarkPk,     setExtStarkPk]      = useState(() => localStorage.getItem('ext_stark_pk')     || '');
   const [extL2Vault,     setExtL2Vault]      = useState(() => localStorage.getItem('ext_l2_vault')     || '');
 
@@ -16,11 +16,11 @@ export default function WalletConfigPanel({
     setHlAgentPk(v);
     localStorage.setItem('hl_agent_pk', v);
   };
-  const saveHlVaultAddress = v => {
-    setHlVaultAddress(v);
-    localStorage.setItem('hl_vault_address', v);
-    onVaultChange?.(v);
-  };
+  //const saveHlVaultAddress = v => {
+  //  setHlVaultAddress(v);
+  //  localStorage.setItem('hl_vault_address', v);
+  //  onVaultChange?.(v);
+  //};
   const saveExtStarkPk = v => {
     setExtStarkPk(v);
     localStorage.setItem('ext_stark_pk', v);
@@ -34,9 +34,10 @@ export default function WalletConfigPanel({
   const canTradeExt = !!extStarkPk && !!extL2Vault;
 
   const hlFields = [
-    { label: 'Adresse compte principal', val: hlAddress,      setter: onHlChange,         type: 'text',     hint: 'Lecture positions & marge' },
-    { label: 'Clé privée Agent Wallet',  val: hlAgentPk,      setter: saveHlAgentPk,      type: 'password', hint: '⚠️ Une seule fois à la création — ne peut que trader' },
-    { label: 'Adresse sous-compte',      val: hlVaultAddress, setter: saveHlVaultAddress, type: 'text',     hint: 'Optionnel — laisser vide pour compte principal' },
+    { label: 'Adresse compte principal', val: hlAddress,      setter: onHlChange,    type: 'text',     hint: 'Lecture positions & marge' },
+    { label: 'Clé privée Agent Wallet',  val: hlAgentPk,      setter: saveHlAgentPk, type: 'password', hint: '⚠️ Une seule fois à la création — ne peut que trader' },
+    { label: 'Adresse sous-compte',      val: hlVaultAddress, setter: onVaultChange, type: 'text',     hint: 'Optionnel — laisser vide pour compte principal' },
+    //                                       ↑ prop          ↑ callback parent direct
   ];
   const extFields = [
     { label: 'Clé API (lecture)',     val: extApiKey,  setter: onExtChange,    type: 'password', hint: 'Marge, positions, funding rates' },
@@ -45,19 +46,16 @@ export default function WalletConfigPanel({
   ];
 
   const handleReset = () => {
-    if (!confirm('Effacer toutes les clés sauvegardées ?')) return;
-    [
-      'hl_address', 'hl_agent_pk', 'hl_vault_address',
-      'ext_stark_pk', 'ext_l2_vault', 'extended_api_keys', 'ext_api_key',
-    ].forEach(k => localStorage.removeItem(k));
-    onHlChange('');
-    onExtChange('');
-    onVaultChange?.('');
-    saveHlAgentPk('');
-    setHlVaultAddress('');
-    saveExtStarkPk('');
-    saveExtL2Vault('');
-  };
+  if (!confirm('Effacer toutes les clés sauvegardées ?')) return;
+  ['hl_address','hl_agent_pk','hl_vault_address','ext_stark_pk','ext_l2_vault','extended_api_keys','ext_api_key']
+    .forEach(k => localStorage.removeItem(k));
+  onHlChange('');
+  onVaultChange('');    // ← callback parent (plus setHlVaultAddress local)
+  onExtChange('');
+  saveHlAgentPk('');
+  saveExtStarkPk('');
+  saveExtL2Vault('');
+};
 
   return (
     <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
