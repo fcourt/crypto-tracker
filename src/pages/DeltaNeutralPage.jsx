@@ -243,7 +243,7 @@ function DropSection({ title, defaultOpen = false, badge = null, children }) {
 
 // ─── Section 1: Wallet & API Keys ────────────────────────────────────────────
 
-function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
+function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange, onVaultChange }) {
   const [open, setOpen] = useState(!hlAddress && !extApiKey);
   const [hlAgentPk,      setHlAgentPk]      = useState(() => localStorage.getItem('hl_agent_pk')      || '');
   const [hlVaultAddress, setHlVaultAddress]  = useState(() => localStorage.getItem('hl_vault_address') || '');
@@ -251,7 +251,7 @@ function WalletConfigPanel({ hlAddress, onHlChange, extApiKey, onExtChange }) {
   const [extL2Vault,     setExtL2Vault]      = useState(() => localStorage.getItem('ext_l2_vault')     || '');
 
   const saveHlAgentPk      = v => { setHlAgentPk(v);      localStorage.setItem('hl_agent_pk', v); };
-  const saveHlVaultAddress = v => { setHlVaultAddress(v); localStorage.setItem('hl_vault_address', v); };
+  const saveHlVaultAddress = v => { setHlVaultAddress(v); localStorage.setItem('hl_vault_address', v); onVaultChange?.(v); };
   const saveExtStarkPk     = v => { setExtStarkPk(v);     localStorage.setItem('ext_stark_pk', v); };
   const saveExtL2Vault     = v => { setExtL2Vault(v);     localStorage.setItem('ext_l2_vault', v); };
 
@@ -896,6 +896,7 @@ export default function DeltaNeutralPage() {
   const { getAssetMeta } = useHLMeta();
 
   const [hlAddress, setHlAddress] = useState(() => localStorage.getItem('hl_address') || '');
+  const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address') || '');
   const [extApiKey, setExtApiKey] = useState(() => getExtendedApiKeys()[0]?.apiKey || '');
 
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
@@ -904,7 +905,8 @@ export default function DeltaNeutralPage() {
   const saveExtKey    = (key)  => { setExtApiKey(key);  saveExtendedApiKey(key, 'Delta Neutral'); };
 
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
-  const hlMargin  = useHLMargin(hlAddress);
+  const marginAddress = hlVaultAddress || hlAddress;
+  const hlMargin = useHLMargin(marginAddress);
   const extMargin = useExtMargin(extApiKey);
 
   const market = MARKETS.find(m => m.id === marketId);
@@ -1012,7 +1014,13 @@ export default function DeltaNeutralPage() {
         </div>
       </div>
 
-      <WalletConfigPanel hlAddress={hlAddress} onHlChange={saveHlAddress} extApiKey={extApiKey} onExtChange={saveExtKey} />
+      <WalletConfigPanel 
+        hlAddress={hlAddress} 
+        onHlChange={saveHlAddress} 
+        extApiKey={extApiKey} 
+        onExtChange={saveExtKey}
+        onVaultChange={setHlVaultAddress}
+        />
 
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
