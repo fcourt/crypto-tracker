@@ -138,8 +138,13 @@ export default function DeltaNeutralPage() {
 
   // buildOrderParams reste ICI dans le composant
 const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
-  const hlKey      = market?.hlKey;
-  const meta       = getAssetMeta(hlKey);
+  const hlKey = market?.hlKey;
+  const meta  = getAssetMeta(hlKey);
+
+  // ← Bloquer si l'asset n'est pas trouvé au lieu de silencieusement trader BTC
+  if (platformId !== 'extended' && !meta) {
+    throw new Error(`Asset "${hlKey}" non trouvé dans la meta Hyperliquid — vider le cache et recharger`);
+  }
 
   const szDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
@@ -148,28 +153,26 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
     ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
     : (meta?.pxDecimals ?? 2);
 
-  // Prix : 5 chiffres significatifs pour HL, pxDecimals pour Extended
   const roundedPrice = platformId !== 'extended'
     ? roundToHLPrice(limitPrice)
     : limitPrice;
 
-  // Size : arrondi propre via toFixed pour éviter les erreurs float IEEE 754
-  const rawSize = useStepSize && getStepSize(marketId)
+  const rawSize     = useStepSize && getStepSize(marketId)
     ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
     : sizeAsset;
-  const roundedSize = parseFloat(rawSize.toFixed(szDecimals)); // ← plus de 0.00210000000003
+  const roundedSize = parseFloat(rawSize.toFixed(szDecimals));
 
-  console.log(`[Order] ${hlKey} | price: ${limitPrice} → ${roundedPrice} | size: ${rawSize} → ${roundedSize} (szDec: ${szDecimals})`);
+  console.log(`[Order] ${hlKey} | index: ${meta?.index} | price: ${limitPrice} → ${roundedPrice} | size: ${roundedSize}`);
 
   return {
-    platformId, hlKey, extKey: market?.extKey, assetIndex: meta?.index ?? 0,
+    platformId, hlKey, extKey: market?.extKey,
+    assetIndex: meta?.index,  // ← plus de ?? 0
     isBuy:      side === 'LONG',
     size:       roundedSize,
     limitPrice: roundedPrice,
     szDecimals, pxDecimals, orderType, reduceOnly,
   };
-};
-  
+};  
   const handlePlaceLeg = async (legNum) => {
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
