@@ -219,10 +219,32 @@ export function usePlaceOrder() {
   const hlVaultAddress  = localStorage.getItem('hl_vault_address') || null;
   const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
   const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
-  const canTradeHL      = !!agentPrivateKey;
-  const canTradeExt     = !!starkPrivateKey && !!l2Vault;
+  //const canTradeHL      = !!agentPrivateKey;
+  //const canTradeExt     = !!starkPrivateKey && !!l2Vault;
 
+  // APRÈS — recalculé à chaque render
+  const canTradeHL  = useCallback(() => !!localStorage.getItem('hl_agent_pk'), []);
+  const canTradeExt = useCallback(
+    () => !!localStorage.getItem('ext_stark_pk') && !!localStorage.getItem('ext_l2_vault'),
+    []
+  );
+  
   const placeOrder = async (params) => {
+    // ← Lire MAINTENANT, pas au mount du hook
+    const extApiKey =
+      localStorage.getItem('ext_api_key') ||
+      (() => {
+        try { return JSON.parse(localStorage.getItem('extended_api_keys') || '[]')[0]?.apiKey || ''; }
+        catch { return ''; }
+    })();
+
+    // Idem pour les autres clés si elles sont lues en dehors
+    const extStarkPk  = localStorage.getItem('ext_stark_pk')  || '';
+    const extL2Vault  = localStorage.getItem('ext_l2_vault')  || '';
+    const hlAgentPk   = localStorage.getItem('hl_agent_pk')   || '';
+    const hlVault     = localStorage.getItem('hl_vault_address') || '';
+
+
     const freshStarkPk   = localStorage.getItem('ext_stark_pk')  || '';
     const freshL2Vault   = localStorage.getItem('ext_l2_vault')  || ''; // clé unifiée
     const freshExtApiKey = (() => {
@@ -272,6 +294,10 @@ export function usePlaceOrder() {
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
     return result;
   };
-
-  return { placeOrder, canTradeHL, canTradeExt };
+  
+  return {
+    placeOrder,
+    get canTradeHL()  { return !!localStorage.getItem('hl_agent_pk'); },
+    get canTradeExt() { return !!localStorage.getItem('ext_stark_pk') && !!localStorage.getItem('ext_l2_vault'); },
+  };
 }
