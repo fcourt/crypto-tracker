@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';  // ← useEffect ajouté
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
@@ -6,10 +6,10 @@ import { usePlaceOrder } from '../hooks/usePlaceOrder';
 import { useHLMeta } from '../hooks/useHLMeta';
 import { useHLMargin, useExtMargin, useOrderBook } from '../hooks/useDNData';
 import { loadFees, saveFees, minLeverageFor } from '../utils/dnHelpers';
-import WalletConfigPanel  from '../components/delta-neutral/WalletConfigPanel';
-import FeeConfigPanel     from '../components/delta-neutral/FeeConfigPanel';
-import OpenTradeSection   from '../components/delta-neutral/OpenTradeSection';
-import OpenTradesPanel    from '../components/delta-neutral/OpenTradesPanel';
+import WalletConfigPanel from '../components/delta-neutral/WalletConfigPanel';
+import FeeConfigPanel    from '../components/delta-neutral/FeeConfigPanel';
+import OpenTradeSection  from '../components/delta-neutral/OpenTradeSection';
+import OpenTradesPanel   from '../components/delta-neutral/OpenTradesPanel';
 
 function PriceDot({ fresh }) {
   return <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${fresh ? 'bg-green-400' : 'bg-yellow-500'}`} />;
@@ -33,28 +33,43 @@ export default function DeltaNeutralPage() {
   const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
   const { getAssetMeta } = useHLMeta();
 
-  const [hlAddress, setHlAddress] = useState(() => localStorage.getItem('hl_address') || '');
-  //const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address') || '');
-  const saveHlVaultAddress = (v) => { setHlVaultAddress(v); localStorage.setItem('hl_vault_address', v); };
-  const [extApiKey, setExtApiKey] = useState(
-    () => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || ''
-  );
+  // ── Adresses ──────────────────────────────────────────────────────────────
+  const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
+  const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address')?.trim() || '');
+  const [extApiKey,      setExtApiKey]      = useState(() => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || '');
 
-  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
+  // Hydratation au mount — garantit la synchro si le state rate le localStorage
+  useEffect(() => {
+    const vault = localStorage.getItem('hl_vault_address')?.trim() || '';
+    if (vault !== hlVaultAddress) setHlVaultAddress(vault);
+  }, []);
 
-  const saveHlAddress = (addr) => { setHlAddress(addr); localStorage.setItem('hl_address', addr); };
-  const saveExtKey    = (key)  => {
+  // ── Fonctions save ────────────────────────────────────────────────────────
+  const saveHlAddress = (v) => {
+    const val = v.trim();
+    setHlAddress(val);
+    localStorage.setItem('hl_address', val);
+  };
+  const saveHlVaultAddress = (v) => {
+    const val = v.trim();
+    setHlVaultAddress(val);
+    localStorage.setItem('hl_vault_address', val);
+  };
+  const saveExtKey = (key) => {
     setExtApiKey(key);
     localStorage.setItem('ext_api_key', key);
     saveExtendedApiKey(key, 'Delta Neutral');
   };
 
-  const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
+  // ── Hooks trading ─────────────────────────────────────────────────────────
+  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
-  // ← Marge sur le sous-compte si configuré, sinon compte principal
-  const marginAddress = hlVaultAddress || hlAddress;
-  const hlMargin  = useHLMargin(marginAddress);
+  // ── Marges — useHLMargin reçoit les 2 adresses et décide lui-même ─────────
+  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
+
+  // ── Funding & prix ────────────────────────────────────────────────────────
+  const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
 
   const market = MARKETS.find(m => m.id === marketId);
   const plat1  = PLATFORMS.find(p => p.id === platform1);
@@ -153,9 +168,16 @@ export default function DeltaNeutralPage() {
 
   return (
     <div className="px-4 pb-8 flex flex-col gap-4 pt-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Position Delta Neutral</h2>
-        <div className="flex items-center text-xs text-gray-500">
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          {/* Indicateur adresse marge HL */}
+          {hlMarginAddress && (
+            <span className={`font-mono ${hlMarginAddress === hlVaultAddress && hlVaultAddress ? 'text-green-400' : 'text-yellow-500'}`}>
+              {hlMarginAddress === hlVaultAddress && hlVaultAddress ? '✓ sous-compte' : '⚠ compte principal'}
+              {' '}{hlMarginAddress.slice(0, 6)}…{hlMarginAddress.slice(-4)}
+            </span>
+          )}
           <PriceDot fresh={fresh} />
           {lastUpdate ? `MAJ ${lastUpdate.toLocaleTimeString('fr-FR')}` : 'Chargement...'}
         </div>
@@ -163,9 +185,9 @@ export default function DeltaNeutralPage() {
 
       <WalletConfigPanel
         hlAddress={hlAddress}           onHlChange={saveHlAddress}
-        hlVaultAddress={hlVaultAddress} onVaultChange={saveHlVaultAddress}  // ← contrôlé
+        hlVaultAddress={hlVaultAddress} onVaultChange={saveHlVaultAddress}
         extApiKey={extApiKey}           onExtChange={saveExtKey}
-        />
+      />
 
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
@@ -186,7 +208,7 @@ export default function DeltaNeutralPage() {
       />
 
       <OpenTradesPanel
-        address={hlVaultAddress || hlAddress}  // ← était juste hlAddress
+        address={hlVaultAddress || hlAddress}
         extApiKey={extApiKey} fees={fees} getPrice={getPrice}
       />
     </div>
