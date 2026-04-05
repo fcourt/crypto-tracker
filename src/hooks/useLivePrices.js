@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 
@@ -143,28 +143,29 @@ async function fetchExtMids() {
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export function useLivePrices(intervalMs = 3000) {
-  const [hlMids,     setHlMids]     = useState({});
-  const [hlSteps,    setHlSteps]    = useState({});
-  const [hlAssetMeta,  setHlAssetMeta]  = useState({}); // ← nouveau
-  const [extMids,    setExtMids]    = useState({});
-  const [extPrecisions, setExtPrecisions] = useState({}); 
-  const [lastUpdate, setLastUpdate] = useState(null);
+  const [hlMids,        setHlMids]        = useState({});
+  const [hlSteps,       setHlSteps]       = useState({});
+  const [hlAssetMeta,   setHlAssetMeta]   = useState({});
+  const [extMids,       setExtMids]       = useState({});
+  const [extPrecisions, setExtPrecisions] = useState({});
+  const [lastUpdate,    setLastUpdate]    = useState(null);
   const timer = useRef(null);
 
   const fetchAll = async () => {
-  const [{ prices, stepSizes }, { priceMap, precisionMap }] = await Promise.all([
-    fetchHLMids(),
-    fetchExtMids(),
-  ]);
-  setHlMids(prices        || {});
-  setHlSteps(stepSizes    || {});
-  setHlAssetMeta(assetMeta || {}); // ← nouveau
-  setExtMids(priceMap      || {});
-  setExtPrecisions(precisionMap || {}); // 👈
-  setLastUpdate(new Date());
-};
-
-  const getExtPrecision = (extKey) => extPrecisions[extKey] ?? { szDecimals: 2, pxDecimals: 2 };
+    const [
+      { prices, stepSizes, assetMeta }, // ← assetMeta ajouté ici
+      { priceMap, precisionMap },
+    ] = await Promise.all([
+      fetchHLMids(),
+      fetchExtMids(),
+    ]);
+    setHlMids(prices        || {});
+    setHlSteps(stepSizes    || {});
+    setHlAssetMeta(assetMeta || {}); // ← maintenant défini
+    setExtMids(priceMap     || {});
+    setExtPrecisions(precisionMap || {});
+    setLastUpdate(new Date());
+  };
 
   useEffect(() => {
     fetchAll();
@@ -172,19 +173,20 @@ export function useLivePrices(intervalMs = 3000) {
     return () => clearInterval(timer.current);
   }, []);
 
-  const getAssetMeta = useCallback((hlKey) => { // ← nouveau
+  const getAssetMeta = useCallback((hlKey) => {
     if (!hlKey) return null;
     if (hlAssetMeta[hlKey]) return hlAssetMeta[hlKey];
     const stripped = hlKey.replace(/^(xyz:|hyna:)/, '');
     return hlAssetMeta[stripped] ?? null;
   }, [hlAssetMeta]);
 
-  const getExtPrecision = (extKey) => extPrecisions[extKey] ?? { szDecimals: 2, pxDecimals: 2 };
-  
+  const getExtPrecision = useCallback((extKey) => { // ← une seule fois, useCallback pour stabilité
+    return extPrecisions[extKey] ?? { szDecimals: 2, pxDecimals: 2 };
+  }, [extPrecisions]);
+
   const getPrice = (marketId, platformId) => {
     const market = MARKETS.find(m => m.id === marketId);
     if (!market) return null;
-    // Pas de clé HL → fallback sur Extended
     if (!market.hlKey) {
       return market.extKey ? parseFloat(extMids[market.extKey]) || null : null;
     }
@@ -201,5 +203,5 @@ export function useLivePrices(intervalMs = 3000) {
     return hlSteps[market.hlKey] ?? 0.01;
   };
 
-  return { getPrice, getStepSize, getAssetMeta, hlMids, extMids, lastUpdate, getExtPrecision };
+  return { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate };
 }
