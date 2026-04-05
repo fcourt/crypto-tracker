@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react'; // ← useMemo ajouté
 import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
@@ -62,36 +62,10 @@ async function fetchExtPositions(apiKey) {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-/*export function useHLMargin(address) {
-  const [margin, setMargin] = useState(null);
-  useEffect(() => {
-    if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
-    const run = async () => {
-      try {
-        const res   = await fetch(HL_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'clearinghouseState', user: address }),
-        });
-        const state = await res.json();
-        setMargin(
-          parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
-          parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
-        );
-      } catch { setMargin(null); }
-    };
-    run();
-    const t = setInterval(run, 15000);
-    return () => clearInterval(t);
-  }, [address]);
-  return margin;
-}*/
-
-// Remplacer useHLMargin par cette version
 export function useHLMargin(mainAddress, vaultAddress) {
   const [margin, setMargin] = useState(null);
 
-  // Résolution de l'adresse effective à l'intérieur du hook
+  // Résout l'adresse effective : sous-compte en priorité, sinon compte principal
   const effectiveAddress = useMemo(() => {
     const vault = vaultAddress?.trim();
     const main  = mainAddress?.trim();
@@ -101,7 +75,7 @@ export function useHLMargin(mainAddress, vaultAddress) {
   }, [mainAddress, vaultAddress]);
 
   useEffect(() => {
-    if (!effectiveAddress) return;
+    if (!effectiveAddress) { setMargin(null); return; }
     const run = async () => {
       try {
         const res   = await fetch(HL_API, {
