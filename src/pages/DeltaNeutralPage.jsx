@@ -34,7 +34,8 @@ export default function DeltaNeutralPage() {
   const { getAssetMeta } = useHLMeta();
 
   const [hlAddress, setHlAddress] = useState(() => localStorage.getItem('hl_address') || '');
-  const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address') || '');
+  //const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address') || '');
+  const saveHlVaultAddress = (v) => { setHlVaultAddress(v); localStorage.setItem('hl_vault_address', v); };
   const [extApiKey, setExtApiKey] = useState(
     () => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || ''
   );
@@ -161,10 +162,10 @@ export default function DeltaNeutralPage() {
       </div>
 
       <WalletConfigPanel
-        hlAddress={hlAddress}    onHlChange={saveHlAddress}
-        extApiKey={extApiKey}    onExtChange={saveExtKey}
-        onVaultChange={setHlVaultAddress}
-      />
+        hlAddress={hlAddress}           onHlChange={saveHlAddress}
+        hlVaultAddress={hlVaultAddress} onVaultChange={saveHlVaultAddress}  // ← contrôlé
+        extApiKey={extApiKey}           onExtChange={saveExtKey}
+        />
 
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
@@ -185,7 +186,8 @@ export default function DeltaNeutralPage() {
       />
 
       <OpenTradesPanel
-        address={hlAddress} extApiKey={extApiKey} fees={fees} getPrice={getPrice}
+        address={hlVaultAddress || hlAddress}  // ← était juste hlAddress
+        extApiKey={extApiKey} fees={fees} getPrice={getPrice}
       />
     </div>
   );
