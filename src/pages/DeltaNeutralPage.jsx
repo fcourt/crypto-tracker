@@ -3,7 +3,6 @@ import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
-import { useHLMeta } from '../hooks/useHLMeta';
 import { useHLMargin, useExtMargin, useOrderBook } from '../hooks/useDNData';
 import { loadFees, saveFees, minLeverageFor, roundToHLPrice } from '../utils/dnHelpers';
 import WalletConfigPanel from '../components/delta-neutral/WalletConfigPanel';
@@ -31,9 +30,8 @@ export default function DeltaNeutralPage() {
   const [placingLeg2,     setPlacingLeg2]     = useState(false);
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
-  const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
-  const { getAssetMeta } = useHLMeta();
-
+  //const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
+  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices();
   // ── Adresses ──────────────────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
   const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address')?.trim() || '');
