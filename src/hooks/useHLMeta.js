@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const HL_API       = 'https://api.hyperliquid.xyz/info';
 //const CACHE_KEY    = 'hl_meta_cache';
-const CACHE_KEY = 'hl_meta_cache_v2'; // ← v2 force un nouveau fetch
+const CACHE_KEY = 'hl_meta_cache_v3'; // ← force un refetch propre
 const CACHE_TTL_MS = 1000 * 60 * 60; // 1h
 
 export function useHLMeta() {
