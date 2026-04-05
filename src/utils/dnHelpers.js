@@ -27,11 +27,12 @@ export function saveFees(fees) {
   localStorage.setItem(FEES_STORAGE_KEY, JSON.stringify(fees));
 }
 
-// Ajouter uniquement roundToTickSize — le reste est déjà bon
-export function roundToTickSize(price, tickSize) {
-  if (!tickSize || tickSize <= 0) return price;
-  const inverse = 1 / tickSize;
-  return Math.round(price * inverse) / inverse;
+// Remplacer roundToTickSize par cette fonction
+export function roundToHLPrice(price) {
+  if (!price || price <= 0) return price;
+  const magnitude = Math.floor(Math.log10(Math.abs(price)));
+  const factor    = Math.pow(10, 4 - magnitude); // garde 5 chiffres significatifs
+  return Math.round(price * factor) / factor;
 }
 
 export function rawPricePnl(leg1, leg2, px1, px2) {
