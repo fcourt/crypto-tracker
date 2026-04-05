@@ -33,19 +33,24 @@ export function useHLMeta() {
     })
       .then(r => r.json())
       .then(data => {
-        const map = {};
-        (data?.universe ?? []).forEach((asset, index) => {
-          map[asset.name] = {
-            index,
-            szDecimals:  asset.szDecimals  ?? 6,
-            pxDecimals:  asset.pxDecimals  ?? 2,
-            tickSize:    asset.tickSize     ?? null, // ← pour roundToTickSize
-            maxLeverage: asset.maxLeverage  ?? null,
-          };
-        });
-        setAssetMap(map);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: map }));
-      })
+  const map = {};
+  (data?.universe ?? []).forEach((asset, index) => {
+    const entry = {
+      index,
+      szDecimals:  asset.szDecimals  ?? 6,
+      pxDecimals:  asset.pxDecimals  ?? 2,
+      tickSize:    asset.tickSize     ?? null,
+      maxLeverage: asset.maxLeverage  ?? null,
+    };
+    // Stocker avec le nom original (ex: 'xyz:GOLD')
+    map[asset.name] = entry;
+    // ET sans préfixe (ex: 'GOLD') pour les deux sens de lookup
+    const stripped = asset.name.replace(/^(xyz:|hyna:)/, '');
+    if (stripped !== asset.name) map[stripped] = entry;
+  });
+  setAssetMap(map);
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: map }));
+})
       .catch(e => console.warn('useHLMeta error:', e.message));
   }, []);
 
