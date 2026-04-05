@@ -30,8 +30,8 @@ export default function DeltaNeutralPage() {
   const [placingLeg2,     setPlacingLeg2]     = useState(false);
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
-  //const { getPrice, getStepSize, getExtPrecision, lastUpdate } = useLivePrices(3000);
-  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices();
+  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices(3000);
+  //const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices();
   // ── Adresses ──────────────────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
   const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address')?.trim() || '');
