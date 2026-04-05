@@ -5,7 +5,7 @@ import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
 import { useHLMeta } from '../hooks/useHLMeta';
 import { useHLMargin, useExtMargin, useOrderBook } from '../hooks/useDNData';
-import { loadFees, saveFees, minLeverageFor, roundToTickSize } from '../utils/dnHelpers';
+import { loadFees, saveFees, minLeverageFor, roundToHLPrice } from '../utils/dnHelpers';
 import WalletConfigPanel from '../components/delta-neutral/WalletConfigPanel';
 import FeeConfigPanel    from '../components/delta-neutral/FeeConfigPanel';
 import OpenTradeSection  from '../components/delta-neutral/OpenTradeSection';
@@ -140,8 +140,6 @@ export default function DeltaNeutralPage() {
 const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
   const hlKey      = market?.hlKey;
   const meta       = getAssetMeta(hlKey);
-  const tickSize   = meta?.tickSize;
-  const szStep     = meta?.szDecimals != null ? Math.pow(10, -meta.szDecimals) : null;
 
   const szDecimals = platformId === 'extended'
     ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
@@ -150,20 +148,18 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
     ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
     : (meta?.pxDecimals ?? 2);
 
-  // Prix arrondi au tick size exact pour HL
-  const roundedPrice = platformId !== 'extended' && tickSize
-    ? roundToTickSize(limitPrice, tickSize)
+  // Prix : 5 chiffres significatifs pour HL, pxDecimals pour Extended
+  const roundedPrice = platformId !== 'extended'
+    ? roundToHLPrice(limitPrice)
     : limitPrice;
 
-  // Size arrondie au step size exact pour HL
+  // Size : arrondi propre via toFixed pour éviter les erreurs float IEEE 754
   const rawSize = useStepSize && getStepSize(marketId)
     ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
     : sizeAsset;
-  const roundedSize = szStep
-    ? Math.floor(rawSize / szStep) * szStep
-    : rawSize;
+  const roundedSize = parseFloat(rawSize.toFixed(szDecimals)); // ← plus de 0.00210000000003
 
-  console.log(`[Order] ${hlKey} | tick: ${tickSize} | price: ${limitPrice} → ${roundedPrice} | size: ${rawSize} → ${roundedSize}`);
+  console.log(`[Order] ${hlKey} | price: ${limitPrice} → ${roundedPrice} | size: ${rawSize} → ${roundedSize} (szDec: ${szDecimals})`);
 
   return {
     platformId, hlKey, extKey: market?.extKey, assetIndex: meta?.index ?? 0,
@@ -173,7 +169,7 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
     szDecimals, pxDecimals, orderType, reduceOnly,
   };
 };
-
+  
   const handlePlaceLeg = async (legNum) => {
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
