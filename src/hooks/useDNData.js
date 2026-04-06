@@ -63,39 +63,44 @@ async function fetchExtPositions(apiKey) {
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 export function useHLMargin(mainAddress, vaultAddress) {
-  const [margin, setMargin] = useState(null);
+  const [mainMargin,  setMainMargin]  = useState(null);
+  const [vaultMargin, setVaultMargin] = useState(null);
 
-  // Résout l'adresse effective : sous-compte en priorité, sinon compte principal
+  const isValid = (addr) => !!addr?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(addr.trim());
+
+  const fetchMargin = async (address, setter) => {
+    if (!isValid(address)) { setter(null); return; }
+    try {
+      const res   = await fetch(HL_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
+      });
+      const state = await res.json();
+      setter(
+        parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
+        parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
+      );
+    } catch { setter(null); }
+  };
+
+  useEffect(() => {
+    fetchMargin(mainAddress,  setMainMargin);
+    fetchMargin(vaultAddress, setVaultMargin);
+    const t = setInterval(() => {
+      fetchMargin(mainAddress,  setMainMargin);
+      fetchMargin(vaultAddress, setVaultMargin);
+    }, 15000);
+    return () => clearInterval(t);
+  }, [mainAddress, vaultAddress]);
+
   const effectiveAddress = useMemo(() => {
-    const vault = vaultAddress?.trim();
-    const main  = mainAddress?.trim();
-    if (vault && /^0x[0-9a-fA-F]{40}$/.test(vault)) return vault;
-    if (main  && /^0x[0-9a-fA-F]{40}$/.test(main))  return main;
+    if (isValid(vaultAddress)) return vaultAddress.trim();
+    if (isValid(mainAddress))  return mainAddress.trim();
     return null;
   }, [mainAddress, vaultAddress]);
 
-  useEffect(() => {
-    if (!effectiveAddress) { setMargin(null); return; }
-    const run = async () => {
-      try {
-        const res   = await fetch(HL_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'clearinghouseState', user: effectiveAddress }),
-        });
-        const state = await res.json();
-        setMargin(
-          parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
-          parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
-        );
-      } catch { setMargin(null); }
-    };
-    run();
-    const t = setInterval(run, 15000);
-    return () => clearInterval(t);
-  }, [effectiveAddress]);
-
-  return { margin, effectiveAddress };
+  return { mainMargin, vaultMargin, effectiveAddress };
 }
 
 export function useExtMargin(apiKey) {
