@@ -85,14 +85,20 @@ export function useHLMargin(mainAddress, vaultAddress) {
           console.log('[HL margin] looking for vault:', vault.toLowerCase());
           if (Array.isArray(data) && data.length > 0) {
             const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
-            if (sub?.clearinghouseState) {
-              const cs  = sub.clearinghouseState;
-              const val = parseFloat(cs?.marginSummary?.accountValue    || 0)
-                        - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
-              console.log('[HL margin] sub found, margin =', val);
+            if (sub) {
+              const cs       = sub.clearinghouseState;
+              const perpFree = parseFloat(cs?.marginSummary?.accountValue    || 0)
+                 - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
+
+              // Spot USDC disponible (fonds non encore transferes en perp)
+              const spotUsdc = (sub.spotState?.balances || []).find(b => b.coin === 'USDC');
+              const spotFree = parseFloat(spotUsdc?.total || 0);
+
+              const val = perpFree > 0 ? perpFree : spotFree;
+              console.log('[HL margin] sub found =>', { perpFree, spotFree, val });
               if (!cancelled) setMargin(val);
               return;
-            }
+            }            
             console.log('[HL margin] vault not found in subAccounts list');
           } else {
             console.log('[HL margin] subAccounts null/empty - hlAddress is not master');
