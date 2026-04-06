@@ -206,13 +206,13 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 export function usePlaceOrder() {
 
   const placeOrder = async (params) => {
-    // ← Toutes les clés lues ICI au moment du trade — jamais en dehors
     const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
     const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
-    const extApiKey       = readExtApiKey();                           // ← fonction helper
+    const extApiKey       = readExtApiKey();
     const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
     const vaultAddress    = localStorage.getItem('hl_vault_address') || null;
 
+    // ← hlKey ajouté ici
     const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
 
     if (platformId === 'extended') {
@@ -237,7 +237,7 @@ export function usePlaceOrder() {
 
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-    // ← AJOUTER ICI — détecte le dex depuis le hlKey
+    // Détecte le dex HIP-3 depuis le hlKey
     const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
               : hlKey?.startsWith('hyna:') ? 'hyna'
               : undefined;
@@ -253,7 +253,7 @@ export function usePlaceOrder() {
       }],
       grouping:     'na',
       vaultAddress: vaultAddress || undefined,
-      ...(dex ? { dex } : {}),  // ← clé du fix xyz/hyna
+      ...(dex ? { dex } : {}),   // ← routage HIP-3
     });
 
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
