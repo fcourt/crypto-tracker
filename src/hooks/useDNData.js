@@ -60,6 +60,43 @@ async function fetchExtPositions(apiKey) {
   } catch (e) { console.warn('fetchExtPositions error:', e.message); return []; }
 }
 
+export function useHLMargin(mainAddress, vaultAddress) {
+  const [margin, setMargin] = useState(null);
+
+  // Wallet secondaire en priorité, sinon principal — exactement comme l'original
+  const effectiveAddress = useMemo(() => {
+    const vault = vaultAddress?.trim();
+    const main  = mainAddress?.trim();
+    if (vault && /^0x[0-9a-fA-F]{40}$/i.test(vault)) return vault;
+    if (main  && /^0x[0-9a-fA-F]{40}$/i.test(main))  return main;
+    return null;
+  }, [mainAddress, vaultAddress]);
+
+  useEffect(() => {
+    if (!effectiveAddress) { setMargin(null); return; }
+    const run = async () => {
+      try {
+        const res   = await fetch(HL_API, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ type: 'clearinghouseState', user: effectiveAddress }),
+        });
+        const state = await res.json();
+        setMargin(
+          parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
+          parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
+        );
+      } catch { setMargin(null); }
+    };
+    run();
+    const t = setInterval(run, 15000);
+    return () => clearInterval(t);
+  }, [effectiveAddress]);
+
+  return { margin, effectiveAddress };
+}
+
+/*
 async function fetchMarginForAddress(address) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
   try {
@@ -105,6 +142,7 @@ export function useHLMargin(mainAddress, vaultAddress) {
 
   return { mainMargin, vaultMargin, effectiveAddress };
 }
+*/
 
 export function useExtMargin(apiKey) {
   const [margin, setMargin] = useState(null);
