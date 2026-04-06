@@ -100,23 +100,26 @@ function readExtApiKey() {
 }
 
 // ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
-export async function enableAgentDexAbstraction(agentPrivateKey) {
+export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = null) {
   const wallet    = privateKeyToAccount(agentPrivateKey);
   const action    = { type: 'agentEnableDexAbstraction' };
   const nonce     = Date.now();
-  const signature = await signL1Action({ wallet, action, nonce });
+  const signature = await signL1Action(
+    vaultAddress ? { wallet, action, nonce, vaultAddress } : { wallet, action, nonce }
+  );
+  const body = { action, signature, nonce };
+  if (vaultAddress) body.vaultAddress = vaultAddress;
 
   const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ action, signature, nonce }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   const text = await res.text();
   let result;
   try { result = JSON.parse(text); } catch { throw new Error(text); }
   if (result?.status === 'err') {
-  const msg = result?.response ?? '';
-  if (msg.includes('transition not allowed')) return result; // déjà activé, pas une erreur
+    const msg = result?.response ?? '';
+    if (msg.includes('transition not allowed')) return result;
     throw new Error(msg || 'Erreur agentEnableDexAbstraction');
   }
   return result;
@@ -273,13 +276,26 @@ const orderEntry = {
     // signL1Action + fetch direct — évite le strip valibot du SDK
     const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce     = Date.now();
-    const signature = await signL1Action({
-      wallet, action, nonce,
-      ...(vaultAddress ? { vaultAddress } : {}),
-    });
+    //const signature = await signL1Action({
+    //  wallet, action, nonce,
+    //  ...(vaultAddress ? { vaultAddress } : {}),
+    //});
     
+    //const body = { action, signature, nonce };
+    //if (vaultAddress) body.vaultAddress = vaultAddress;
+
+    const isHip3 = assetIndex >= 100000;
+
+    // HIP-3 abstraction : hash sans vaultAddress, body avec vaultAddress
+    // Natif HL : hash ET body avec vaultAddress
+    const signature = await signL1Action(
+      isHip3
+      ? { wallet, action, nonce }
+      : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) }
+    );
+
     const body = { action, signature, nonce };
-    if (vaultAddress) body.vaultAddress = vaultAddress;
+    if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
