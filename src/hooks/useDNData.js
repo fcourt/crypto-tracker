@@ -148,19 +148,30 @@ export function useOrderBook(hlKey) {
   return book;
 }
 
-export function useOpenPositions(address, extApiKey) {
+export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
   const [positions, setPositions] = useState([]);
   const [loading,   setLoading]   = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [hlPos, extPos] = await Promise.all([
-        fetchHLPositions(address),
+      const [hlMain, hlVault, extPos] = await Promise.all([
+        fetchHLPositions(mainAddress),   // compte principal
+        fetchHLPositions(vaultAddress),  // sous-compte
         fetchExtPositions(extApiKey),
       ]);
-      setPositions([...hlPos, ...extPos]);
+      // Fusion avec déduplication (même coin sur même plateforme)
+      const seen   = new Set();
+      const hlUniq = [...hlMain, ...hlVault].filter(p => {
+        const key = `${p.platform}-${p.coin}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      setPositions([...hlUniq, ...extPos]);
     } catch (e) { console.warn('useOpenPositions error:', e.message); }
     finally { setLoading(false); }
-  }, [address, extApiKey]);
+  }, [mainAddress, vaultAddress, extApiKey]);
+
   return { positions, loading, load };
 }
