@@ -60,57 +60,70 @@ async function fetchExtPositions(apiKey) {
   } catch (e) { console.warn('fetchExtPositions error:', e.message); return []; }
 }
 
-export function useHLMargin(address) {
-  const [margin, setMargin] = useState(null);
+export function useHLMargin(mainAddress, vaultAddress) {
+  const [margin,           setMargin]           = useState(null);
+  const [effectiveAddress, setEffectiveAddress] = useState(null);
 
   useEffect(() => {
-    if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address)) {
-      setMargin(null);
-      return;
-    }
+    const main  = mainAddress?.trim();
+    const vault = vaultAddress?.trim();
+    const validMain  = main  && /^0x[0-9a-fA-F]{40}$/i.test(main);
+    const validVault = vault && /^0x[0-9a-fA-F]{40}$/i.test(vault);
+
+    if (!validMain && !validVault) { setMargin(null); setEffectiveAddress(null); return; }
+
+    setEffectiveAddress(validVault ? vault : main);
+
     let cancelled = false;
     const run = async () => {
       try {
+        // ── Sous-compte HL : DOIT passer par subAccounts(master) ──────────────
+        // clearinghouseState(subAccountAddress) retourne toujours 0 par design HL
+        if (validVault && validMain) {
+          const res  = await fetch(HL_API, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
+          });
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            const sub = data.find(s =>
+              s.subAccountUser?.toLowerCase() === vault.toLowerCase()
+            );
+            if (sub?.clearinghouseState) {
+              const cs  = sub.clearinghouseState;
+              const val = parseFloat(cs?.marginSummary?.accountValue    || 0)
+                        - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
+              if (!cancelled) setMargin(val);
+              return;
+            }
+          }
+        }
+
+        // ── Compte principal : clearinghouseState direct ───────────────────────
+        const addr  = (validVault ? vault : main).toLowerCase();
         const res   = await fetch(HL_API, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ type: 'clearinghouseState', user: address.toLowerCase() }),
+          body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
         });
         const state = await res.json();
-
-        // marginSummary = total réel (cross + isolated)
-        // crossMarginSummary = cross uniquement (0 si compte en mode isolated)
-        const totalValue  = parseFloat(state?.marginSummary?.accountValue    || 0);
-        const totalUsed   = parseFloat(state?.marginSummary?.totalMarginUsed || 0);
-        const crossValue  = parseFloat(state?.crossMarginSummary?.accountValue    || 0);
-        const crossUsed   = parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
-
-        // Priorité : marge cross disponible si > 0, sinon marge totale disponible
-        const freeCross = crossValue - crossUsed;
-        const freeTotal = totalValue - totalUsed;
-        const val = freeCross > 0 ? freeCross : freeTotal;
-
-        console.log('[useHLMargin]', address.slice(0,8), {
-          marginSummary: { accountValue: totalValue, totalMarginUsed: totalUsed },
-          crossMarginSummary: { accountValue: crossValue, totalMarginUsed: crossUsed },
-          withdrawable: state?.withdrawable,
-          result: val,
-        });
-
-        if (!cancelled) setMargin(val > 0 ? val : parseFloat(state?.withdrawable || 0));
+        const val   = parseFloat(state?.marginSummary?.accountValue    || 0)
+                    - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
+        if (!cancelled) setMargin(val);
       } catch (e) {
-        console.error('[useHLMargin] fetch error:', e.message);
+        console.error('[useHLMargin]', e.message);
         if (!cancelled) setMargin(null);
       }
     };
+
     run();
     const t = setInterval(run, 15000);
     return () => { cancelled = true; clearInterval(t); };
-  }, [address]);
+  }, [mainAddress, vaultAddress]);
 
-  return { margin, effectiveAddress: address };
+  return { margin, effectiveAddress };
 }
-
 /*
 async function fetchMarginForAddress(address) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
