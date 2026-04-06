@@ -276,13 +276,24 @@ const orderEntry = {
     // signL1Action + fetch direct — évite le strip valibot du SDK
     const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce     = Date.now();
-    const signature = await signL1Action({
-      wallet, action, nonce,
-      ...(vaultAddress ? { vaultAddress } : {}),
-    });
-    
+    //const signature = await signL1Action({
+    //  wallet, action, nonce,
+    //  ...(vaultAddress ? { vaultAddress } : {}),
+    //});
+
+    const isHip3 = assetIndex >= 100000;
+
+    const signature = await signL1Action(
+      isHip3
+        ? { wallet, action, nonce }                                          // HIP-3 : sans vaultAddress
+        : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) } // Natif : avec
+    );
+
     const body = { action, signature, nonce };
-    if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
+    if (!isHip3 && vaultAddress) body.vaultAddress = vaultAddress; // ← PAS dans le body pour HIP-3 non plus
+    
+    //const body = { action, signature, nonce };
+    //if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
