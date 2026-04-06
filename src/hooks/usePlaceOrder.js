@@ -1,6 +1,6 @@
 // src/hooks/usePlaceOrder.js
 
-import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+//import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
@@ -268,16 +268,6 @@ const orderEntry = {
     let result;
     try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
-    return result;
-  }
-
-    // ── Marchés natifs HL : SDK standard
-    const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
-    const result   = await exchange.order(
-    { orders: [orderEntry], grouping: 'na' },
-      vaultAddress ? { vaultAddress } : {}   // ← sous-compte si défini
-    );
-    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL');
     return result;
   };
 
