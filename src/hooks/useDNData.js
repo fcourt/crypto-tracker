@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'; // ← useMemo ajouté
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
 // ─── Fetchers ─────────────────────────────────────────────────────────────────
 
 async function fetchHLPositions(address) {
-  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return [];
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
     const res   = await fetch(HL_API, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'clearinghouseState', user: address }),
+      body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
     });
     const state = await res.json();
     return (state?.assetPositions || [])
@@ -60,43 +60,47 @@ async function fetchExtPositions(apiKey) {
   } catch (e) { console.warn('fetchExtPositions error:', e.message); return []; }
 }
 
+async function fetchMarginForAddress(address) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
+  try {
+    const res   = await fetch(HL_API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
+    });
+    const state = await res.json();
+    return (
+      parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
+      parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
+    );
+  } catch { return null; }
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
 export function useHLMargin(mainAddress, vaultAddress) {
   const [mainMargin,  setMainMargin]  = useState(null);
   const [vaultMargin, setVaultMargin] = useState(null);
 
-  const isValid = (addr) => !!addr?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(addr.trim());
-
-  const fetchMargin = async (address, setter) => {
-    if (!isValid(address)) { setter(null); return; }
-    try {
-      const res   = await fetch(HL_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
-      });
-      const state = await res.json();
-      setter(
-        parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
-        parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
-      );
-    } catch { setter(null); }
-  };
-
   useEffect(() => {
-    fetchMargin(mainAddress,  setMainMargin);
-    fetchMargin(vaultAddress, setVaultMargin);
-    const t = setInterval(() => {
-      fetchMargin(mainAddress,  setMainMargin);
-      fetchMargin(vaultAddress, setVaultMargin);
-    }, 15000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    const run = async () => {
+      const [m, v] = await Promise.all([
+        fetchMarginForAddress(mainAddress),
+        fetchMarginForAddress(vaultAddress),
+      ]);
+      if (!cancelled) { setMainMargin(m); setVaultMargin(v); }
+    };
+    run();
+    const t = setInterval(run, 15000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [mainAddress, vaultAddress]);
 
   const effectiveAddress = useMemo(() => {
-    if (isValid(vaultAddress)) return vaultAddress.trim();
-    if (isValid(mainAddress))  return mainAddress.trim();
+    if (vaultAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(vaultAddress.trim()))
+      return vaultAddress.trim();
+    if (mainAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(mainAddress.trim()))
+      return mainAddress.trim();
     return null;
   }, [mainAddress, vaultAddress]);
 
@@ -131,9 +135,9 @@ export function useOrderBook(hlKey) {
     const run = async () => {
       try {
         const res  = await fetch(HL_API, {
-          method: 'POST',
+          method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'l2Book', coin: hlKey }),
+          body:    JSON.stringify({ type: 'l2Book', coin: hlKey }),
         });
         const data = await res.json();
         const bid  = parseFloat(data?.levels?.[0]?.[0]?.px);
@@ -156,11 +160,11 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
     setLoading(true);
     try {
       const [hlMain, hlVault, extPos] = await Promise.all([
-        fetchHLPositions(mainAddress),   // compte principal
-        fetchHLPositions(vaultAddress),  // sous-compte
+        fetchHLPositions(mainAddress),
+        fetchHLPositions(vaultAddress),
         fetchExtPositions(extApiKey),
       ]);
-      // Fusion avec déduplication (même coin sur même plateforme)
+      // Déduplique si même coin sur même plateforme (cas vault = sous-compte du main)
       const seen   = new Set();
       const hlUniq = [...hlMain, ...hlVault].filter(p => {
         const key = `${p.platform}-${p.coin}`;
