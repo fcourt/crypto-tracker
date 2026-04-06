@@ -229,12 +229,18 @@ export function usePlaceOrder() {
       });
     }
 
+    // ─── Ordre Hyperliquid (natif + xyz + hyna) ───────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
     const wallet   = privateKeyToAccount(agentPrivateKey);
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
 
     const isMaker = !params.orderType || params.orderType === 'maker';
+
+    // ← AJOUTER ICI — détecte le dex depuis le hlKey
+    const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
+              : hlKey?.startsWith('hyna:') ? 'hyna'
+              : undefined;
 
     const result = await exchange.order({
       orders: [{
@@ -247,6 +253,7 @@ export function usePlaceOrder() {
       }],
       grouping:     'na',
       vaultAddress: vaultAddress || undefined,
+      ...(dex ? { dex } : {}),  // ← clé du fix xyz/hyna
     });
 
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
