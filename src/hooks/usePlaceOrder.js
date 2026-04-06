@@ -99,6 +99,25 @@ function readExtApiKey() {
   );
 }
 
+// ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
+export async function enableAgentDexAbstraction(agentPrivateKey) {
+  const wallet    = privateKeyToAccount(agentPrivateKey);
+  const action    = { type: 'agentEnableDexAbstraction' };
+  const nonce     = Date.now();
+  const signature = await signL1Action({ wallet, action, nonce });
+
+  const res = await fetch('https://api.hyperliquid.xyz/exchange', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ action, signature, nonce }),
+  });
+  const text = await res.text();
+  let result;
+  try { result = JSON.parse(text); } catch { throw new Error(text); }
+  if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur agentEnableDexAbstraction');
+  return result;
+}
+
 // ─── Placement d'ordre Extended Exchange ─────────────────────────────────
 async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }) {
   const L2_CONFIGS = await loadExtendedL2Configs();
