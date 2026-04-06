@@ -213,7 +213,7 @@ export function usePlaceOrder() {
     const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
     const vaultAddress    = localStorage.getItem('hl_vault_address') || null;
 
-    const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
+    const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
 
     if (platformId === 'extended') {
       if (!starkPrivateKey || !l2Vault) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
