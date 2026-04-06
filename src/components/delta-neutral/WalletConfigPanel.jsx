@@ -68,8 +68,13 @@ const handleEnableDex = async () => {
     await enableAgentDexAbstraction(agentPk);
     setDexStatus('ok');
   } catch (e) {
-    console.error(e);
-    setDexStatus('error');
+    // "Abstraction transition not allowed" = déjà activé = OK
+    if (e.message?.includes('transition not allowed')) {
+      setDexStatus('ok');
+    } else {
+      console.error(e);
+      setDexStatus('error');
+    }
   }
 };
   
