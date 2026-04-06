@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
-// ─── Fetchers ─────────────────────────────────────────────────────────────────
-
 async function fetchHLPositions(address) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
@@ -67,104 +65,57 @@ export function useHLMargin(mainAddress, vaultAddress) {
   useEffect(() => {
     const main  = mainAddress?.trim();
     const vault = vaultAddress?.trim();
-    const validMain  = main  && /^0x[0-9a-fA-F]{40}$/i.test(main);
-    const validVault = vault && /^0x[0-9a-fA-F]{40}$/i.test(vault);
+    const validMain  = !!(main  && /^0x[0-9a-fA-F]{40}$/i.test(main));
+    const validVault = !!(vault && /^0x[0-9a-fA-F]{40}$/i.test(vault));
 
     if (!validMain && !validVault) { setMargin(null); setEffectiveAddress(null); return; }
-
     setEffectiveAddress(validVault ? vault : main);
 
     let cancelled = false;
-   /*
     const run = async () => {
       try {
-        // ── Sous-compte HL : DOIT passer par subAccounts(master) ──────────────
-        // clearinghouseState(subAccountAddress) retourne toujours 0 par design HL
         if (validVault && validMain) {
-          const res  = await fetch(HL_API, {
+          const r1   = await fetch(HL_API, {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
           });
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            const sub = data.find(s =>
-              s.subAccountUser?.toLowerCase() === vault.toLowerCase()
-            );
+          const data = await r1.json();
+          console.log('[HL margin] subAccounts raw:', JSON.stringify(data));
+          console.log('[HL margin] looking for vault:', vault.toLowerCase());
+          if (Array.isArray(data) && data.length > 0) {
+            const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
             if (sub?.clearinghouseState) {
               const cs  = sub.clearinghouseState;
               const val = parseFloat(cs?.marginSummary?.accountValue    || 0)
                         - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
+              console.log('[HL margin] sub found, margin =', val);
               if (!cancelled) setMargin(val);
               return;
             }
+            console.log('[HL margin] vault not found in subAccounts list');
+          } else {
+            console.log('[HL margin] subAccounts null/empty - hlAddress is not master');
           }
         }
-        */
 
-    const run = async () => {
-  try {
-    if (validVault && validMain) {
-      const res  = await fetch(HL_API, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
-      });
-      const data = await res.json();
-
-      // ← LOG CRITIQUE : montre tout ce que HL renvoie
-      console.log('[useHLMargin] subAccounts response:', JSON.stringify(data));
-      console.log('[useHLMargin] looking for vault:', vault.toLowerCase());
-
-      if (Array.isArray(data) && data.length > 0) {
-        data.forEach(s => console.log('[useHLMargin] found subAccount:', s.subAccountUser));
-        const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
-        if (sub?.clearinghouseState) {
-          const cs  = sub.clearinghouseState;
-          const val = parseFloat(cs?.marginSummary?.accountValue    || 0)
-                    - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
-          console.log('[useHLMargin] sub found, margin =', val);
-          if (!cancelled) setMargin(val);
-          return;
-        }
-        console.log('[useHLMargin] vault address NOT found in subAccounts list');
-      } else {
-        console.log('[useHLMargin] subAccounts = null ou vide → hlAddress nest PAS le master');
-      }
-    }
-
-    // Fallback clearinghouseState direct
-    const addr  = (validVault ? vault : main).toLowerCase();
-    console.log('[useHLMargin] fallback clearinghouseState pour:', addr);
-    const res   = await fetch(HL_API, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
-    });
-    const state = await res.json();
-    const val   = parseFloat(state?.marginSummary?.accountValue    || 0)
-                - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
-    console.log('[useHLMargin] clearinghouseState direct, margin =', val, state?.marginSummary);
-    if (!cancelled) setMargin(val);
-  } catch (e) {
-    console.error('[useHLMargin] ERREUR:', e.message);
-    if (!cancelled) setMargin(null);
-  }
-};
-
-        // ── Compte principal : clearinghouseState direct ───────────────────────
         const addr  = (validVault ? vault : main).toLowerCase();
-        const res   = await fetch(HL_API, {
+        console.log('[HL margin] fallback clearinghouseState for:', addr);
+        const r2    = await fetch(HL_API, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
         });
-        const state = await res.json();
-        const val   = parseFloat(state?.marginSummary?.accountValue    || 0)
+        const state = await r2.json();
+        const cross = parseFloat(state?.crossMarginSummary?.accountValue    || 0)
+                    - parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
+        const total = parseFloat(state?.marginSummary?.accountValue    || 0)
                     - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
+        const val   = cross > 0 ? cross : total;
+        console.log('[HL margin] direct =>', { cross, total, withdrawable: state?.withdrawable, val });
         if (!cancelled) setMargin(val);
       } catch (e) {
-        console.error('[useHLMargin]', e.message);
+        console.error('[HL margin] error:', e.message);
         if (!cancelled) setMargin(null);
       }
     };
@@ -176,53 +127,6 @@ export function useHLMargin(mainAddress, vaultAddress) {
 
   return { margin, effectiveAddress };
 }
-/*
-async function fetchMarginForAddress(address) {
-  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
-  try {
-    const res   = await fetch(HL_API, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
-    });
-    const state = await res.json();
-    // withdrawable = marge disponible fiable (cross + isolated, tous modes)
-    const w = parseFloat(state?.withdrawable ?? 0);
-    return isNaN(w) ? null : w;
-  } catch { return null; }
-}
-
-// ─── Hooks ────────────────────────────────────────────────────────────────────
-
-export function useHLMargin(mainAddress, vaultAddress) {
-  const [mainMargin,  setMainMargin]  = useState(null);
-  const [vaultMargin, setVaultMargin] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      const [m, v] = await Promise.all([
-        fetchMarginForAddress(mainAddress),
-        fetchMarginForAddress(vaultAddress),
-      ]);
-      if (!cancelled) { setMainMargin(m); setVaultMargin(v); }
-    };
-    run();
-    const t = setInterval(run, 15000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [mainAddress, vaultAddress]);
-
-  const effectiveAddress = useMemo(() => {
-    if (vaultAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(vaultAddress.trim()))
-      return vaultAddress.trim();
-    if (mainAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(mainAddress.trim()))
-      return mainAddress.trim();
-    return null;
-  }, [mainAddress, vaultAddress]);
-
-  return { mainMargin, vaultMargin, effectiveAddress };
-}
-*/
 
 export function useExtMargin(apiKey) {
   const [margin, setMargin] = useState(null);
@@ -281,10 +185,9 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
         fetchHLPositions(vaultAddress),
         fetchExtPositions(extApiKey),
       ]);
-      // Déduplique si même coin sur même plateforme (cas vault = sous-compte du main)
       const seen   = new Set();
       const hlUniq = [...hlMain, ...hlVault].filter(p => {
-        const key = `${p.platform}-${p.coin}`;
+        const key = p.platform + '-' + p.coin;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
