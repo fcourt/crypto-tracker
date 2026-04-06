@@ -50,16 +50,14 @@ export default function DeltaNeutralPage() {
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
   // ── Marges ─────────────────────────────────────────────────────────────────
-  const { mainMargin, vaultMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
+  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
 
-  const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
-
   const getMarginForPlatform = (platformId) => {
-    if (platformId === 'extended') return extMargin;
-    if (platformId === 'hyena')    return null;
-    return isVaultValid ? vaultMargin : mainMargin;
-  };
+  if (platformId === 'extended') return extMargin;
+  if (platformId === 'hyena')    return null;
+  return hlMargin;
+};
 
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
@@ -99,7 +97,7 @@ export default function DeltaNeutralPage() {
       leverage1: minLeverageFor(val, getMarginForPlatform(platform1)),
       leverage2: minLeverageFor(val, getMarginForPlatform(platform2)),
     };
-  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, mainMargin, vaultMargin, extMargin]);
+  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, hlMargin, extMargin]);
 
   const handleFeeChange = (platformId, type, value) => {
     const updated = { ...fees, [platformId]: { ...fees[platformId], [type]: value } };
@@ -183,9 +181,8 @@ export default function DeltaNeutralPage() {
         <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Position Delta Neutral</h2>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           {hlMarginAddress && (
-            <span className={`font-mono ${isVaultValid ? 'text-green-400' : 'text-yellow-500'}`}>
-              {isVaultValid ? '✓ sous-compte' : '⚠ compte principal'}
-              {' '}{hlMarginAddress.slice(0, 6)}…{hlMarginAddress.slice(-4)}
+            <span className="font-mono text-green-400">
+              ✓ {hlMarginAddress.slice(0, 6)}…{hlMarginAddress.slice(-4)}
             </span>
           )}
           <PriceDot fresh={fresh} />
