@@ -212,7 +212,7 @@ export function usePlaceOrder() {
     const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
     const extApiKey       = readExtApiKey();
     const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
-    const vaultAddress    = localStorage.getItem('hl_vault_address') || null;
+    const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
 
     // ← hlKey ajouté ici
     const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
@@ -257,23 +257,31 @@ export function usePlaceOrder() {
       const nonce  = Date.now();
       const signature = await signL1Action({ wallet, action, nonce });
       const body = { action, signature, nonce };
-      //if (vaultAddress) body.vaultAddress = vaultAddress;
+      if (vaultAddress) body.vaultAddress = vaultAddress;
 
       const res  = await fetch('https://api.hyperliquid.xyz/exchange', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
       });
-      const result = await res.json();
+
+      // ← Gestion 422 non-JSON
+      const text = await res.text();
+      let result;
+      try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
       if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
       return result;
+      
+     // const result = await res.json();
+     // if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
+     // return result;
     }
 
     // ── Marchés natifs HL : SDK standard
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
     const result   = await exchange.order(
-      { orders: [orderEntry], grouping: 'na' },   // params (action fields)
-      {}                                           // opts (pas de vaultAddress)
+    { orders: [orderEntry], grouping: 'na' },
+      vaultAddress ? { vaultAddress } : {}   // ← sous-compte si défini
     );
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL');
     return result;
