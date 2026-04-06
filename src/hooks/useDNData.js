@@ -75,6 +75,7 @@ export function useHLMargin(mainAddress, vaultAddress) {
     setEffectiveAddress(validVault ? vault : main);
 
     let cancelled = false;
+   /*
     const run = async () => {
       try {
         // ── Sous-compte HL : DOIT passer par subAccounts(master) ──────────────
@@ -99,6 +100,57 @@ export function useHLMargin(mainAddress, vaultAddress) {
             }
           }
         }
+        */
+
+    const run = async () => {
+  try {
+    if (validVault && validMain) {
+      const res  = await fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
+      });
+      const data = await res.json();
+
+      // ← LOG CRITIQUE : montre tout ce que HL renvoie
+      console.log('[useHLMargin] subAccounts response:', JSON.stringify(data));
+      console.log('[useHLMargin] looking for vault:', vault.toLowerCase());
+
+      if (Array.isArray(data) && data.length > 0) {
+        data.forEach(s => console.log('[useHLMargin] found subAccount:', s.subAccountUser));
+        const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
+        if (sub?.clearinghouseState) {
+          const cs  = sub.clearinghouseState;
+          const val = parseFloat(cs?.marginSummary?.accountValue    || 0)
+                    - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
+          console.log('[useHLMargin] sub found, margin =', val);
+          if (!cancelled) setMargin(val);
+          return;
+        }
+        console.log('[useHLMargin] vault address NOT found in subAccounts list');
+      } else {
+        console.log('[useHLMargin] subAccounts = null ou vide → hlAddress nest PAS le master');
+      }
+    }
+
+    // Fallback clearinghouseState direct
+    const addr  = (validVault ? vault : main).toLowerCase();
+    console.log('[useHLMargin] fallback clearinghouseState pour:', addr);
+    const res   = await fetch(HL_API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
+    });
+    const state = await res.json();
+    const val   = parseFloat(state?.marginSummary?.accountValue    || 0)
+                - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
+    console.log('[useHLMargin] clearinghouseState direct, margin =', val, state?.marginSummary);
+    if (!cancelled) setMargin(val);
+  } catch (e) {
+    console.error('[useHLMargin] ERREUR:', e.message);
+    if (!cancelled) setMargin(null);
+  }
+};
 
         // ── Compte principal : clearinghouseState direct ───────────────────────
         const addr  = (validVault ? vault : main).toLowerCase();
