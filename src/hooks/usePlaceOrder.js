@@ -294,6 +294,17 @@ const orderEntry = {
     
     //const body = { action, signature, nonce };
     //if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
+
+// ← LOG TEMPORAIRE
+console.log('[ORDER DEBUG]', {
+  isHip3,
+  assetIndex,
+  vaultAddress,
+  bodyVaultAddress: body.vaultAddress,
+  signedWithVault: !isHip3 && !!vaultAddress,
+  actionKeys: Object.keys(action),
+  signature: { r: signature.r?.slice(0,10), s: signature.s?.slice(0,10), v: signature.v },
+});
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
