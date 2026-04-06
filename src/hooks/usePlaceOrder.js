@@ -234,43 +234,42 @@ export function usePlaceOrder() {
     // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
-    const wallet  = privateKeyToAccount(agentPrivateKey);
-    const isMaker = !params.orderType || params.orderType === 'maker';
+const wallet  = privateKeyToAccount(agentPrivateKey);
+const isMaker = !params.orderType || params.orderType === 'maker';
 
-    const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
-              : hlKey?.startsWith('hyna:') ? 'hyna'
-              : undefined;
-
-    const orderEntry = {
-      a: assetIndex,
-      b: isBuy,
-      p: limitPrice.toFixed(pxDecimals ?? 2),
-      s: size.toFixed(szDecimals ?? 6),
-      r: params.reduceOnly ?? false,
-      t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-    };
-
-    // ── Marchés HIP-3 (xyz / hyna) : signL1Action + fetch direct
-    //    car le SDK strip les champs non définis dans son schéma valibot
-    if (dex) {
-  const action = { type: 'order', orders: [orderEntry], grouping: 'na', dex };
-  const nonce  = Date.now();
-  const signature = await signL1Action({ wallet, action, nonce });
-  const body = { action, signature, nonce };
-  // ← PAS de vaultAddress pour xyz/hyna — non supporté, cause 422
-
-  const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  let result;
-  try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
-  if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
-  return result;
-}
+const orderEntry = {
+  a: assetIndex,   // déjà encodé correctement (100003 pour xyz:GOLD)
+  b: isBuy,
+  p: limitPrice.toFixed(pxDecimals ?? 2),
+  s: size.toFixed(szDecimals ?? 6),
+  r: params.reduceOnly ?? false,
+  t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+};
+    
+    // Un seul chemin pour TOUS les marchés HL (natifs + HIP-3)
+    // signL1Action + fetch direct — évite le strip valibot du SDK
+    const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    const nonce     = Date.now();
+    const signature = await signL1Action({
+      wallet, action, nonce,
+      ...(vaultAddress ? { vaultAddress } : {}),
+    });
+    
+    const body = { action, signature, nonce };
+    if (vaultAddress) body.vaultAddress = vaultAddress;
+    
+    const res = await fetch('https://api.hyperliquid.xyz/exchange', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    
+    const text = await res.text();
+    let result;
+    try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
+    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
+    return result;
+  }
 
     // ── Marchés natifs HL : SDK standard
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
