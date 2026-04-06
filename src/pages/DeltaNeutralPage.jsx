@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';  // ← useEffect ajouté
+import { useState, useEffect, useMemo } from 'react';
 import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
@@ -9,7 +9,6 @@ import WalletConfigPanel from '../components/delta-neutral/WalletConfigPanel';
 import FeeConfigPanel    from '../components/delta-neutral/FeeConfigPanel';
 import OpenTradeSection  from '../components/delta-neutral/OpenTradeSection';
 import OpenTradesPanel   from '../components/delta-neutral/OpenTradesPanel';
-
 
 function PriceDot({ fresh }) {
   return <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${fresh ? 'bg-green-400' : 'bg-yellow-500'}`} />;
@@ -54,15 +53,15 @@ export default function DeltaNeutralPage() {
   const { mainMargin, vaultMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
 
-  // Une seule déclaration — après que mainMargin, vaultMargin et extMargin sont définis
+  const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
+
   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
     if (platformId === 'hyena')    return null;
-    const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
     return isVaultValid ? vaultMargin : mainMargin;
   };
 
-  // ── Funding & prix ────────────────────────────────────────────────────────
+  // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
 
   const market = MARKETS.find(m => m.id === marketId);
@@ -108,78 +107,45 @@ export default function DeltaNeutralPage() {
     saveFees(updated);
   };
 
-  /*const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
-    const hlKey      = market?.hlKey;
-    const meta       = getAssetMeta(hlKey);
-    const szDecimals = platformId === 'extended' ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2) : (meta?.szDecimals ?? 6);
-    const pxDecimals = platformId === 'extended' ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2) : (meta?.pxDecimals ?? 2);
+  const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
+    const hlKey  = market?.hlKey;
+    const meta   = getAssetMeta(hlKey);
+
+    if (platformId !== 'extended' && !meta) {
+      console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}"`);
+    }
+
+    const stepSize           = platformId !== 'extended' ? getStepSize(marketId) : null;
+    const szDecimalsFromStep = stepSize && stepSize > 0 ? Math.round(-Math.log10(stepSize)) : null;
+    const szDecimals         = platformId === 'extended'
+      ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
+      : (meta?.szDecimals ?? szDecimalsFromStep ?? 6);
+    const pxDecimals         = platformId === 'extended'
+      ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
+      : (meta?.pxDecimals ?? 2);
+
+    const roundedPrice = platformId !== 'extended' ? roundToHLPrice(limitPrice) : limitPrice;
+    const rawSize      = useStepSize && stepSize ? Math.floor(sizeAsset / stepSize) * stepSize : sizeAsset;
+    const roundedSize  = parseFloat(rawSize.toFixed(szDecimals));
+    const finalSize    = roundedSize > 0 ? roundedSize : parseFloat(sizeAsset.toFixed(szDecimalsFromStep ?? 8));
+
+    console.log(`[Order] ${hlKey} | index: ${meta?.index ?? 0} | szDec: ${szDecimals} (step: ${stepSize}) | price: ${limitPrice} → ${roundedPrice} | size: ${sizeAsset} → ${finalSize}`);
+
     return {
-      platformId, hlKey, extKey: market?.extKey, assetIndex: meta?.index ?? 0,
-      isBuy: side === 'LONG',
-      size: useStepSize && getStepSize(marketId)
-        ? Math.floor(sizeAsset / getStepSize(marketId)) * getStepSize(marketId)
-        : sizeAsset,
-      limitPrice, szDecimals, pxDecimals, orderType, reduceOnly,
+      platformId,
+      hlKey,
+      extKey:     market?.extKey,
+      assetIndex: meta?.index ?? 0,
+      isBuy:      side === 'LONG',
+      size:       finalSize,
+      limitPrice: roundedPrice,
+      szDecimals,
+      pxDecimals,
+      orderType,
+      reduceOnly,
     };
-  };*/
-
-  // buildOrderParams reste ICI dans le composant
-const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
-  const hlKey  = market?.hlKey;
-  const meta   = getAssetMeta(hlKey);
-
-  if (platformId !== 'extended' && !meta) {
-    console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}"`);
-  }
-
-  // ── Décimales pour la size ─────────────────────────────────────────────
-  // Priorité : meta API → dérivé du step size → fallback 6
-  const stepSize = platformId !== 'extended' ? getStepSize(marketId) : null;
-  const szDecimalsFromStep = stepSize && stepSize > 0
-    ? Math.round(-Math.log10(stepSize))   // ex: stepSize=0.0001 → 4
-    : null;
-  const szDecimals = platformId === 'extended'
-    ? (getExtPrecision(market?.extKey)?.szDecimals ?? 2)
-    : (meta?.szDecimals ?? szDecimalsFromStep ?? 6);
-
-  // ── Décimales pour le prix ────────────────────────────────────────────
-  const pxDecimals = platformId === 'extended'
-    ? (getExtPrecision(market?.extKey)?.pxDecimals ?? 2)
-    : (meta?.pxDecimals ?? 2);
-
-  // ── Prix arrondi à 5 chiffres significatifs pour HL ───────────────────
-  const roundedPrice = platformId !== 'extended'
-    ? roundToHLPrice(limitPrice)
-    : limitPrice;
-
-  // ── Size arrondie proprement ──────────────────────────────────────────
-  const rawSize     = useStepSize && stepSize
-    ? Math.floor(sizeAsset / stepSize) * stepSize
-    : sizeAsset;
-  const roundedSize = parseFloat(rawSize.toFixed(szDecimals));
-
-  // Sécurité : si après arrondi la size est 0, utiliser la size brute arrondie au minimum
-  const finalSize = roundedSize > 0
-    ? roundedSize
-    : parseFloat(sizeAsset.toFixed(szDecimalsFromStep ?? 8));
-
-  console.log(`[Order] ${hlKey} | index: ${meta?.index ?? 0} | szDec: ${szDecimals} (step: ${stepSize}) | price: ${limitPrice} → ${roundedPrice} | size: ${sizeAsset} → ${finalSize}`);
-
-  return {
-    platformId,
-    hlKey,
-    extKey:     market?.extKey,
-    assetIndex: meta?.index ?? 0,
-    isBuy:      side === 'LONG',
-    size:       finalSize,
-    limitPrice: roundedPrice,
-    szDecimals,
-    pxDecimals,
-    orderType,
-    reduceOnly,
   };
-};
-  
+
   const handlePlaceLeg = async (legNum) => {
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
@@ -216,10 +182,9 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Position Delta Neutral</h2>
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {/* Indicateur adresse marge HL */}
           {hlMarginAddress && (
-            <span className={`font-mono ${hlMarginAddress === hlVaultAddress && hlVaultAddress ? 'text-green-400' : 'text-yellow-500'}`}>
-              {hlMarginAddress === hlVaultAddress && hlVaultAddress ? '✓ sous-compte' : '⚠ compte principal'}
+            <span className={`font-mono ${isVaultValid ? 'text-green-400' : 'text-yellow-500'}`}>
+              {isVaultValid ? '✓ sous-compte' : '⚠ compte principal'}
               {' '}{hlMarginAddress.slice(0, 6)}…{hlMarginAddress.slice(-4)}
             </span>
           )}
@@ -253,7 +218,7 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
       />
 
       <OpenTradesPanel
-        hlAddress={hlAddress}           // ← remplace address={hlVaultAddress || hlAddress}
+        hlAddress={hlAddress}
         hlVaultAddress={hlVaultAddress}
         extApiKey={extApiKey} fees={fees} getPrice={getPrice}
       />
