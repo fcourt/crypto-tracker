@@ -257,7 +257,7 @@ export function usePlaceOrder() {
       const nonce  = Date.now();
       const signature = await signL1Action({ wallet, action, nonce });
       const body = { action, signature, nonce };
-      if (vaultAddress) body.vaultAddress = vaultAddress;
+      //if (vaultAddress) body.vaultAddress = vaultAddress;
 
       const res  = await fetch('https://api.hyperliquid.xyz/exchange', {
         method:  'POST',
@@ -271,13 +271,11 @@ export function usePlaceOrder() {
 
     // ── Marchés natifs HL : SDK standard
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
-    const result   = await exchange.order({
-      orders:       [orderEntry],
-      grouping:     'na',
-      vaultAddress: vaultAddress || undefined,
-    });
-
-    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
+    const result   = await exchange.order(
+      { orders: [orderEntry], grouping: 'na' },   // params (action fields)
+      {}                                           // opts (pas de vaultAddress)
+    );
+    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL');
     return result;
   };
 
