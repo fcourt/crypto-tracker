@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { enableAgentDexAbstraction } from '../hooks/usePlaceOrder';
+import { enableAgentDexAbstraction } from '../../hooks/usePlaceOrder';
 
 export default function WalletConfigPanel({
   hlAddress, onHlChange,
