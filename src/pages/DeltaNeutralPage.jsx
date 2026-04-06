@@ -30,50 +30,37 @@ export default function DeltaNeutralPage() {
   const [placingLeg2,     setPlacingLeg2]     = useState(false);
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
-  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices(3000);
-  //const { getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate } = useLivePrices();
-  // ── Adresses ──────────────────────────────────────────────────────────────
+  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
+
+  // ── Adresses ───────────────────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
   const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address')?.trim() || '');
   const [extApiKey,      setExtApiKey]      = useState(() => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || '');
 
-  // Hydratation au mount — garantit la synchro si le state rate le localStorage
   useEffect(() => {
     const vault = localStorage.getItem('hl_vault_address')?.trim() || '';
     if (vault !== hlVaultAddress) setHlVaultAddress(vault);
   }, []);
 
-  // ── Fonctions save ────────────────────────────────────────────────────────
-  const saveHlAddress = (v) => {
-    const val = v.trim();
-    setHlAddress(val);
-    localStorage.setItem('hl_address', val);
-  };
-  const saveHlVaultAddress = (v) => {
-    const val = v.trim();
-    setHlVaultAddress(val);
-    localStorage.setItem('hl_vault_address', val);
-  };
-  const saveExtKey = (key) => {
-    setExtApiKey(key);
-    localStorage.setItem('ext_api_key', key);
-    saveExtendedApiKey(key, 'Delta Neutral');
-  };
+  // ── Fonctions save ─────────────────────────────────────────────────────────
+  const saveHlAddress      = (v) => { const val = v.trim(); setHlAddress(val);      localStorage.setItem('hl_address',       val); };
+  const saveHlVaultAddress = (v) => { const val = v.trim(); setHlVaultAddress(val); localStorage.setItem('hl_vault_address', val); };
+  const saveExtKey         = (key) => { setExtApiKey(key); localStorage.setItem('ext_api_key', key); saveExtendedApiKey(key, 'Delta Neutral'); };
 
-  // ── Hooks trading ─────────────────────────────────────────────────────────
+  // ── Hooks trading ──────────────────────────────────────────────────────────
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
-  // ── Marges — useHLMargin reçoit les 2 adresses et décide lui-même ─────────
-  // getMarginForPlatform — utilise la bonne marge selon la plateforme
+  // ── Marges ─────────────────────────────────────────────────────────────────
+  const { mainMargin, vaultMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
+  const extMargin = useExtMargin(extApiKey);
+
+  // Une seule déclaration — après que mainMargin, vaultMargin et extMargin sont définis
   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
     if (platformId === 'hyena')    return null;
-    // Si vault configuré → la marge utilisée pour trader est celle du vault
     const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
     return isVaultValid ? vaultMargin : mainMargin;
   };
-  
-  const extMargin = useExtMargin(extApiKey);
 
   // ── Funding & prix ────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
@@ -84,12 +71,6 @@ export default function DeltaNeutralPage() {
   const price1 = getPrice(marketId, platform1);
   const price2 = getPrice(marketId, platform2);
   const book   = useOrderBook(market?.hlKey);
-
-  const getMarginForPlatform = (platformId) => {
-    if (platformId === 'extended') return extMargin;
-    if (platformId === 'hyena')    return null;
-    return hlMargin;
-  };
 
   const canTradePlatform = (platformId) => platformId === 'extended' ? canTradeExt : canTradeHL;
 
@@ -119,7 +100,7 @@ export default function DeltaNeutralPage() {
       leverage1: minLeverageFor(val, getMarginForPlatform(platform1)),
       leverage2: minLeverageFor(val, getMarginForPlatform(platform2)),
     };
-  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, hlMargin, extMargin]);
+  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, mainMargin, vaultMargin, extMargin]);
 
   const handleFeeChange = (platformId, type, value) => {
     const updated = { ...fees, [platformId]: { ...fees[platformId], [type]: value } };
