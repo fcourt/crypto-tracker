@@ -92,6 +92,7 @@ async function fetchHLMids() {
     };
   });
 
+  /*
   const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
   (xyzMeta?.universe || []).forEach((asset, index) => {
     if (xyzCtxs?.[index]?.markPx) {
@@ -107,7 +108,24 @@ async function fetchHLMids() {
     assetMeta[asset.name] = entry;                           // 'xyz:GOLD'
     const stripped = asset.name.replace(/^xyz:/, '');
     if (stripped !== asset.name) assetMeta[stripped] = entry; // 'GOLD' aussi
-  });
+  });*/
+
+  const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
+(xyzMeta?.universe || []).forEach((asset, index) => {
+  if (xyzCtxs?.[index]?.markPx) {
+    prices[asset.name]    = xyzCtxs[index].markPx;
+    stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 2));
+  }
+  const entry = {
+    index:       100000 + index,   // ← HIP-3 encoded (perp_dex_index=0 pour xyz)
+    szDecimals:  asset.szDecimals  ?? 2,
+    pxDecimals:  asset.pxDecimals  ?? 2,
+    maxLeverage: asset.maxLeverage ?? null,
+  };
+  assetMeta[asset.name] = entry;
+  const stripped = asset.name.replace(/^xyz:/, '');
+  if (stripped !== asset.name) assetMeta[stripped] = entry;
+});
 
   return { prices, stepSizes, assetMeta };
 }
