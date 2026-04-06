@@ -74,14 +74,34 @@ export function useHLMargin(address) {
         const res   = await fetch(HL_API, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ type: 'clearinghouseState', user: address }),
+          body:    JSON.stringify({ type: 'clearinghouseState', user: address.toLowerCase() }),
         });
         const state = await res.json();
-        const val =
-          parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
-          parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
-        if (!cancelled) setMargin(val);
-      } catch { if (!cancelled) setMargin(null); }
+
+        // marginSummary = total réel (cross + isolated)
+        // crossMarginSummary = cross uniquement (0 si compte en mode isolated)
+        const totalValue  = parseFloat(state?.marginSummary?.accountValue    || 0);
+        const totalUsed   = parseFloat(state?.marginSummary?.totalMarginUsed || 0);
+        const crossValue  = parseFloat(state?.crossMarginSummary?.accountValue    || 0);
+        const crossUsed   = parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
+
+        // Priorité : marge cross disponible si > 0, sinon marge totale disponible
+        const freeCross = crossValue - crossUsed;
+        const freeTotal = totalValue - totalUsed;
+        const val = freeCross > 0 ? freeCross : freeTotal;
+
+        console.log('[useHLMargin]', address.slice(0,8), {
+          marginSummary: { accountValue: totalValue, totalMarginUsed: totalUsed },
+          crossMarginSummary: { accountValue: crossValue, totalMarginUsed: crossUsed },
+          withdrawable: state?.withdrawable,
+          result: val,
+        });
+
+        if (!cancelled) setMargin(val > 0 ? val : parseFloat(state?.withdrawable || 0));
+      } catch (e) {
+        console.error('[useHLMargin] fetch error:', e.message);
+        if (!cancelled) setMargin(null);
+      }
     };
     run();
     const t = setInterval(run, 15000);
@@ -90,6 +110,7 @@ export function useHLMargin(address) {
 
   return { margin, effectiveAddress: address };
 }
+
 /*
 async function fetchMarginForAddress(address) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
