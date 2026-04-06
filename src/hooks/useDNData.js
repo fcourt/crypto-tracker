@@ -69,10 +69,9 @@ async function fetchMarginForAddress(address) {
       body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
     });
     const state = await res.json();
-    return (
-      parseFloat(state?.crossMarginSummary?.accountValue    || 0) -
-      parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0)
-    );
+    // withdrawable = marge disponible fiable (cross + isolated, tous modes)
+    const w = parseFloat(state?.withdrawable ?? 0);
+    return isNaN(w) ? null : w;
   } catch { return null; }
 }
 
