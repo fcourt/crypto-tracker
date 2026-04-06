@@ -1,9 +1,11 @@
 // src/hooks/usePlaceOrder.js
 
 import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
+
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -229,31 +231,50 @@ export function usePlaceOrder() {
       });
     }
 
-    // ─── Ordre Hyperliquid (natif + xyz + hyna) ───────────────────────────
+    // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
-    const wallet   = privateKeyToAccount(agentPrivateKey);
-    const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
-
+    const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-    // Détecte le dex HIP-3 depuis le hlKey
     const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
               : hlKey?.startsWith('hyna:') ? 'hyna'
               : undefined;
 
-    const result = await exchange.order({
-      orders: [{
-        a: assetIndex,
-        b: isBuy,
-        p: limitPrice.toFixed(pxDecimals ?? 2),
-        s: size.toFixed(szDecimals ?? 6),
-        r: false,
-        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-      }],
+    const orderEntry = {
+      a: assetIndex,
+      b: isBuy,
+      p: limitPrice.toFixed(pxDecimals ?? 2),
+      s: size.toFixed(szDecimals ?? 6),
+      r: params.reduceOnly ?? false,
+      t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+    };
+
+    // ── Marchés HIP-3 (xyz / hyna) : signL1Action + fetch direct
+    //    car le SDK strip les champs non définis dans son schéma valibot
+    if (dex) {
+      const action = { type: 'order', orders: [orderEntry], grouping: 'na', dex };
+      const nonce  = Date.now();
+      const signature = await signL1Action({ wallet, action, nonce });
+      const body = { action, signature, nonce };
+      if (vaultAddress) body.vaultAddress = vaultAddress;
+
+      const res  = await fetch('https://api.hyperliquid.xyz/exchange', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
+      return result;
+    }
+
+    // ── Marchés natifs HL : SDK standard
+    const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
+    const result   = await exchange.order({
+      orders:       [orderEntry],
       grouping:     'na',
       vaultAddress: vaultAddress || undefined,
-      ...(dex ? { dex } : {}),   // ← routage HIP-3
     });
 
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
