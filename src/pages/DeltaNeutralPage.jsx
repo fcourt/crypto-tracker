@@ -272,7 +272,8 @@ const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, re
       />
 
       <OpenTradesPanel
-        address={hlVaultAddress || hlAddress}
+        hlAddress={hlAddress}           // ← remplace address={hlVaultAddress || hlAddress}
+        hlVaultAddress={hlVaultAddress}
         extApiKey={extApiKey} fees={fees} getPrice={getPrice}
       />
     </div>
