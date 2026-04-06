@@ -121,6 +121,11 @@ const handleEnableDex = async () => {
               ⚡ Activer HIP-3 (xyz / hyna) sur cet agent
             </button>
           
+          {/* ← AJOUTER CES 3 LIGNES */}
+          {dexStatus === 'ok'      && <p className="text-xs text-green-400 text-center">✓ HIP-3 activé pour cet agent</p>}
+          {dexStatus === 'error'   && <p className="text-xs text-red-400 text-center">✗ Erreur — vérifier la clé agent HL</p>}
+          {dexStatus === 'loading' && <p className="text-xs text-gray-400 text-center">Activation en cours…</p>}
+          
           {/* Extended */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-bold text-purple-400 border-b border-gray-700 pb-1">
