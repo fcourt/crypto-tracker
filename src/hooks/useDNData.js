@@ -76,55 +76,42 @@ export function useHLMargin(mainAddress, vaultAddress) {
       try {
         if (validVault && validMain) {
           const r1   = await fetch(HL_API, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
-          });
-          const data = await r1.json();
-          console.log('[HL margin] subAccounts raw:', JSON.stringify(data));
-          console.log('[HL margin] looking for vault:', vault.toLowerCase());
-          if (Array.isArray(data) && data.length > 0) {
-            const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
+        });
+      const data = await r1.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
             if (sub) {
               const cs       = sub.clearinghouseState;
               const perpFree = parseFloat(cs?.marginSummary?.accountValue    || 0)
-                 - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
-
-              // Spot USDC disponible (fonds non encore transferes en perp)
+                         - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
               const spotUsdc = (sub.spotState?.balances || []).find(b => b.coin === 'USDC');
               const spotFree = parseFloat(spotUsdc?.total || 0);
-
-              const val = perpFree > 0 ? perpFree : spotFree;
-              console.log('[HL margin] sub found =>', { perpFree, spotFree, val });
-              if (!cancelled) setMargin(val);
+              if (!cancelled) setMargin(perpFree > 0 ? perpFree : spotFree);
               return;
-            }            
-            console.log('[HL margin] vault not found in subAccounts list');
-          } else {
-            console.log('[HL margin] subAccounts null/empty - hlAddress is not master');
+            }
           }
-        }
-
-        const addr  = (validVault ? vault : main).toLowerCase();
-        console.log('[HL margin] fallback clearinghouseState for:', addr);
-        const r2    = await fetch(HL_API, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
-        });
-        const state = await r2.json();
-        const cross = parseFloat(state?.crossMarginSummary?.accountValue    || 0)
-                    - parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
-        const total = parseFloat(state?.marginSummary?.accountValue    || 0)
-                    - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
-        const val   = cross > 0 ? cross : total;
-        console.log('[HL margin] direct =>', { cross, total, withdrawable: state?.withdrawable, val });
-        if (!cancelled) setMargin(val);
-      } catch (e) {
-        console.error('[HL margin] error:', e.message);
-        if (!cancelled) setMargin(null);
       }
-    };
+
+    const addr  = (validVault ? vault : main).toLowerCase();
+    const r2    = await fetch(HL_API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
+    });
+    const state = await r2.json();
+    const cross = parseFloat(state?.crossMarginSummary?.accountValue    || 0)
+                - parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
+    const total = parseFloat(state?.marginSummary?.accountValue    || 0)
+                - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
+    if (!cancelled) setMargin(cross > 0 ? cross : total);
+  } catch (e) {
+    console.error('[HL margin] error:', e.message);
+    if (!cancelled) setMargin(null);
+  }
+};
 
     run();
     const t = setInterval(run, 15000);
