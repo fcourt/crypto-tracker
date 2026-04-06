@@ -50,7 +50,7 @@ export default function DeltaNeutralPage() {
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
   // ── Marges ─────────────────────────────────────────────────────────────────
-  const hlMarginAddress = hlEffectiveAddress;
+  //const hlMarginAddress = hlEffectiveAddress;
   const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
 
