@@ -295,6 +295,13 @@ const orderEntry = {
     //const body = { action, signature, nonce };
     //if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
 
+const wallet = privateKeyToAccount(agentPrivateKey);
+const isMaker = !params.orderType || params.orderType === 'maker';
+
+// ← AJOUTER
+console.log('[WALLET] address dérivée de hl_agent_pk:', wallet.address);
+console.log('[WALLET] hl_agent_pk présent:', !!agentPrivateKey, '| longueur:', agentPrivateKey.length);
+    
 // ← LOG TEMPORAIRE
 console.log('[ORDER DEBUG]', {
   isHip3,
@@ -304,6 +311,7 @@ console.log('[ORDER DEBUG]', {
   signedWithVault: !isHip3 && !!vaultAddress,
   actionKeys: Object.keys(action),
   signature: { r: signature.r?.slice(0,10), s: signature.s?.slice(0,10), v: signature.v },
+  walletAddress: wallet.address,   // ← AJOUTER
 });
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
