@@ -62,19 +62,15 @@ export default function WalletConfigPanel({
 
 const handleEnableDex = async () => {
   const agentPk = localStorage.getItem('hl_agent_pk');
+  const vault   = localStorage.getItem('hl_vault_address')?.trim() || null;
   if (!agentPk) { setDexStatus('error'); return; }
   try {
     setDexStatus('loading');
-    await enableAgentDexAbstraction(agentPk);
+    await enableAgentDexAbstraction(agentPk, vault);
     setDexStatus('ok');
   } catch (e) {
-    // "Abstraction transition not allowed" = déjà activé = OK
-    if (e.message?.includes('transition not allowed')) {
-      setDexStatus('ok');
-    } else {
-      console.error(e);
-      setDexStatus('error');
-    }
+    console.error(e);
+    setDexStatus('error');
   }
 };
   
