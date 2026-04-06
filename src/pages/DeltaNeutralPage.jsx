@@ -60,7 +60,7 @@ export default function DeltaNeutralPage() {
 
   // ── Marges ─────────────────────────────────────────────────────────────────
   const hlMarginAddress = hlEffectiveAddress;
-  const { margin: hlMargin } = useHLMargin(hlEffectiveAddress, null);
+  const { margin: hlMargin } = useHLMargin(hlEffectiveAddress);
   const extMargin = useExtMargin(extApiKey);
 
   const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
