@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { enableAgentDexAbstraction } from '../hooks/usePlaceOrder';
 
 export default function WalletConfigPanel({
   hlAddress, onHlChange,
@@ -11,6 +12,8 @@ export default function WalletConfigPanel({
   //const [hlVaultAddress, setHlVaultAddress]  = useState(() => localStorage.getItem('hl_vault_address') || '');
   const [extStarkPk,     setExtStarkPk]      = useState(() => localStorage.getItem('ext_stark_pk')     || '');
   const [extL2Vault,     setExtL2Vault]      = useState(() => localStorage.getItem('ext_l2_vault')     || '');
+
+  const [dexStatus, setDexStatus] = useState('');  // ← à ajouter avec les autres useState
 
   const saveHlAgentPk = v => {
     setHlAgentPk(v);
@@ -57,6 +60,19 @@ export default function WalletConfigPanel({
   saveExtL2Vault('');
 };
 
+const handleEnableDex = async () => {
+  const agentPk = localStorage.getItem('hl_agent_pk');
+  if (!agentPk) { setDexStatus('error'); return; }
+  try {
+    setDexStatus('loading');
+    await enableAgentDexAbstraction(agentPk);
+    setDexStatus('ok');
+  } catch (e) {
+    console.error(e);
+    setDexStatus('error');
+  }
+};
+  
   return (
     <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
       <button
@@ -97,7 +113,14 @@ export default function WalletConfigPanel({
               </div>
             ))}
           </div>
-
+          
+            <button
+              onClick={handleEnableDex}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold py-2 px-3 rounded-lg transition-colors"
+              >
+              ⚡ Activer HIP-3 (xyz / hyna) sur cet agent
+            </button>
+          
           {/* Extended */}
           <div className="flex flex-col gap-3">
             <p className="text-xs font-bold text-purple-400 border-b border-gray-700 pb-1">
