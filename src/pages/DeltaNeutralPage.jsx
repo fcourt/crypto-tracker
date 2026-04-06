@@ -49,18 +49,9 @@ export default function DeltaNeutralPage() {
   // ── Hooks trading ──────────────────────────────────────────────────────────
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
-  // ── Adresse effective pour HL : sous-compte en priorité, sinon compte principal
-  const hlEffectiveAddress = useMemo(() => {
-    const vault = hlVaultAddress?.trim();
-    const main  = hlAddress?.trim();
-    if (vault && /^0x[0-9a-fA-F]{40}$/i.test(vault)) return vault;
-    if (main  && /^0x[0-9a-fA-F]{40}$/i.test(main))  return main;
-    return null;
-  }, [hlAddress, hlVaultAddress]);
-
   // ── Marges ─────────────────────────────────────────────────────────────────
   const hlMarginAddress = hlEffectiveAddress;
-  const { margin: hlMargin } = useHLMargin(hlEffectiveAddress);
+  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
 
   const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
