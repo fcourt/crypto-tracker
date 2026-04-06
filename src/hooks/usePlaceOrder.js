@@ -253,29 +253,24 @@ export function usePlaceOrder() {
     // ── Marchés HIP-3 (xyz / hyna) : signL1Action + fetch direct
     //    car le SDK strip les champs non définis dans son schéma valibot
     if (dex) {
-      const action = { type: 'order', orders: [orderEntry], grouping: 'na', dex };
-      const nonce  = Date.now();
-      const signature = await signL1Action({ wallet, action, nonce });
-      const body = { action, signature, nonce };
-      if (vaultAddress) body.vaultAddress = vaultAddress;
+  const action = { type: 'order', orders: [orderEntry], grouping: 'na', dex };
+  const nonce  = Date.now();
+  const signature = await signL1Action({ wallet, action, nonce });
+  const body = { action, signature, nonce };
+  // ← PAS de vaultAddress pour xyz/hyna — non supporté, cause 422
 
-      const res  = await fetch('https://api.hyperliquid.xyz/exchange', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
+  const res = await fetch('https://api.hyperliquid.xyz/exchange', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
 
-      // ← Gestion 422 non-JSON
-      const text = await res.text();
-      let result;
-      try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
-      if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
-      return result;
-      
-     // const result = await res.json();
-     // if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
-     // return result;
-    }
+  const text = await res.text();
+  let result;
+  try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
+  if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HIP-3 inconnue');
+  return result;
+}
 
     // ── Marchés natifs HL : SDK standard
     const exchange = new ExchangeClient({ transport: new HttpTransport(), wallet });
