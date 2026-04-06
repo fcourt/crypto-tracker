@@ -114,7 +114,11 @@ export async function enableAgentDexAbstraction(agentPrivateKey) {
   const text = await res.text();
   let result;
   try { result = JSON.parse(text); } catch { throw new Error(text); }
-  if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur agentEnableDexAbstraction');
+  if (result?.status === 'err') {
+  const msg = result?.response ?? '';
+  if (msg.includes('transition not allowed')) return result; // déjà activé, pas une erreur
+    throw new Error(msg || 'Erreur agentEnableDexAbstraction');
+  }
   return result;
 }
 
