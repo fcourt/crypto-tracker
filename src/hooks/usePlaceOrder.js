@@ -276,24 +276,11 @@ const orderEntry = {
     // signL1Action + fetch direct — évite le strip valibot du SDK
     const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce     = Date.now();
-    //const signature = await signL1Action({
-    //  wallet, action, nonce,
-    //  ...(vaultAddress ? { vaultAddress } : {}),
-    //});
+    const signature = await signL1Action({
+      wallet, action, nonce,
+      ...(vaultAddress ? { vaultAddress } : {}),
+    });
     
-    //const body = { action, signature, nonce };
-    //if (vaultAddress) body.vaultAddress = vaultAddress;
-
-    const isHip3 = assetIndex >= 100000;
-
-    // HIP-3 abstraction : hash sans vaultAddress, body avec vaultAddress
-    // Natif HL : hash ET body avec vaultAddress
-    const signature = await signL1Action(
-      isHip3
-      ? { wallet, action, nonce }
-      : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) }
-    );
-
     const body = { action, signature, nonce };
     if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
     
