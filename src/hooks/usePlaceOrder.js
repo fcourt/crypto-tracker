@@ -263,8 +263,6 @@ export function usePlaceOrder() {
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-    console.log('[WALLET] address:', wallet.address, '| pk length:', agentPrivateKey.length);
-
     const orderEntry = {
       a: assetIndex,
       b: isBuy,
@@ -274,27 +272,27 @@ export function usePlaceOrder() {
       t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
     };
 
-    const action  = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    const nonce   = Date.now();
-    const isHip3  = assetIndex >= 100000;
+    // dex field requis dans le hash msgpack pour les marchés HIP-3
+    const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
+              : hlKey?.startsWith('hyna:') ? 'hyna'
+              : undefined;
 
-    const signature = await signL1Action(
-      isHip3
-        ? { wallet, action, nonce }
-        : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) }
-    );
+    const action = {
+      type: 'order',
+      orders: [orderEntry],
+      grouping: 'na',
+      ...(dex ? { dex } : {}),
+    };
+
+    const nonce = Date.now();
+
+    const signature = await signL1Action({
+      wallet, action, nonce,
+      ...(vaultAddress ? { vaultAddress } : {}),
+    });
 
     const body = { action, signature, nonce };
-    if (!isHip3 && vaultAddress) body.vaultAddress = vaultAddress;
-
-    console.log('[ORDER DEBUG]', {
-      isHip3,
-      assetIndex,
-      vaultAddress,
-      bodyVaultAddress: body.vaultAddress ?? null,
-      walletAddress: wallet.address,
-      signatureV: signature.v,
-    });
+    if (vaultAddress) body.vaultAddress = vaultAddress;
 
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
