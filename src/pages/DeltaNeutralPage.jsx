@@ -49,15 +49,27 @@ export default function DeltaNeutralPage() {
   // ── Hooks trading ──────────────────────────────────────────────────────────
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
+  // ── Adresse effective pour HL : sous-compte en priorité, sinon compte principal
+  const hlEffectiveAddress = useMemo(() => {
+    const vault = hlVaultAddress?.trim();
+    const main  = hlAddress?.trim();
+    if (vault && /^0x[0-9a-fA-F]{40}$/i.test(vault)) return vault;
+    if (main  && /^0x[0-9a-fA-F]{40}$/i.test(main))  return main;
+    return null;
+  }, [hlAddress, hlVaultAddress]);
+
   // ── Marges ─────────────────────────────────────────────────────────────────
-  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
+  const hlMarginAddress = hlEffectiveAddress;
+  const { margin: hlMargin } = useHLMargin(hlEffectiveAddress, null);
   const extMargin = useExtMargin(extApiKey);
 
+  const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
+
   const getMarginForPlatform = (platformId) => {
-  if (platformId === 'extended') return extMargin;
-  if (platformId === 'hyena')    return null;
-  return hlMargin;
-};
+    if (platformId === 'extended') return extMargin;
+    if (platformId === 'hyena')    return null;
+    return hlMargin;
+  };
 
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
