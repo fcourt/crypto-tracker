@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
