@@ -257,69 +257,51 @@ export function usePlaceOrder() {
       });
     }
 
-    // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
+        // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
-const wallet  = privateKeyToAccount(agentPrivateKey);
-const isMaker = !params.orderType || params.orderType === 'maker';
+    const wallet  = privateKeyToAccount(agentPrivateKey);
+    const isMaker = !params.orderType || params.orderType === 'maker';
 
-const orderEntry = {
-  a: assetIndex,   // déjà encodé correctement (100003 pour xyz:GOLD)
-  b: isBuy,
-  p: limitPrice.toFixed(pxDecimals ?? 2),
-  s: size.toFixed(szDecimals ?? 6),
-  r: params.reduceOnly ?? false,
-  t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-};
-    
-    // Un seul chemin pour TOUS les marchés HL (natifs + HIP-3)
-    // signL1Action + fetch direct — évite le strip valibot du SDK
-    const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    const nonce     = Date.now();
-    //const signature = await signL1Action({
-    //  wallet, action, nonce,
-    //  ...(vaultAddress ? { vaultAddress } : {}),
-    //});
+    console.log('[WALLET] address:', wallet.address, '| pk length:', agentPrivateKey.length);
 
-    const isHip3 = assetIndex >= 100000;
+    const orderEntry = {
+      a: assetIndex,
+      b: isBuy,
+      p: limitPrice.toFixed(pxDecimals ?? 2),
+      s: size.toFixed(szDecimals ?? 6),
+      r: params.reduceOnly ?? false,
+      t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+    };
+
+    const action  = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    const nonce   = Date.now();
+    const isHip3  = assetIndex >= 100000;
 
     const signature = await signL1Action(
       isHip3
-        ? { wallet, action, nonce }                                          // HIP-3 : sans vaultAddress
-        : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) } // Natif : avec
+        ? { wallet, action, nonce }
+        : { wallet, action, nonce, ...(vaultAddress ? { vaultAddress } : {}) }
     );
 
     const body = { action, signature, nonce };
-    if (!isHip3 && vaultAddress) body.vaultAddress = vaultAddress; // ← PAS dans le body pour HIP-3 non plus
-    
-    //const body = { action, signature, nonce };
-    //if (vaultAddress) body.vaultAddress = vaultAddress;  // toujours dans le body
+    if (!isHip3 && vaultAddress) body.vaultAddress = vaultAddress;
 
-const wallet = privateKeyToAccount(agentPrivateKey);
-const isMaker = !params.orderType || params.orderType === 'maker';
+    console.log('[ORDER DEBUG]', {
+      isHip3,
+      assetIndex,
+      vaultAddress,
+      bodyVaultAddress: body.vaultAddress ?? null,
+      walletAddress: wallet.address,
+      signatureV: signature.v,
+    });
 
-// ← AJOUTER
-console.log('[WALLET] address dérivée de hl_agent_pk:', wallet.address);
-console.log('[WALLET] hl_agent_pk présent:', !!agentPrivateKey, '| longueur:', agentPrivateKey.length);
-    
-// ← LOG TEMPORAIRE
-console.log('[ORDER DEBUG]', {
-  isHip3,
-  assetIndex,
-  vaultAddress,
-  bodyVaultAddress: body.vaultAddress,
-  signedWithVault: !isHip3 && !!vaultAddress,
-  actionKeys: Object.keys(action),
-  signature: { r: signature.r?.slice(0,10), s: signature.s?.slice(0,10), v: signature.v },
-  walletAddress: wallet.address,   // ← AJOUTER
-});
-    
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     });
-    
+
     const text = await res.text();
     let result;
     try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
