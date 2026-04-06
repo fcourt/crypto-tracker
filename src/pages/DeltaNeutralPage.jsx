@@ -64,7 +64,15 @@ export default function DeltaNeutralPage() {
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
 
   // ── Marges — useHLMargin reçoit les 2 adresses et décide lui-même ─────────
-  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
+  // getMarginForPlatform — utilise la bonne marge selon la plateforme
+  const getMarginForPlatform = (platformId) => {
+    if (platformId === 'extended') return extMargin;
+    if (platformId === 'hyena')    return null;
+    // Si vault configuré → la marge utilisée pour trader est celle du vault
+    const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
+    return isVaultValid ? vaultMargin : mainMargin;
+  };
+  
   const extMargin = useExtMargin(extApiKey);
 
   // ── Funding & prix ────────────────────────────────────────────────────────
