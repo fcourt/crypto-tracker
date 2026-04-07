@@ -5,8 +5,8 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
-import { encode as encodeMsgpack } from '@std/msgpack'; // ou l'import existant du SDK
-
+// Accès direct à l'encodeur interne du SDK
+import { encode as encodeMsgpack } from '@nktkas/hyperliquid/deps/jsr.io/@std/msgpack/1.0.3/encode.js';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -277,17 +277,14 @@ export function usePlaceOrder() {
     const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce  = Date.now();
 
-// ─── DIAGNOSTIC MSGPACK ───────────────────────────────────
-const actionBytes  = encodeMsgpack(action);
-const nonceBytes   = new Uint8Array(8);
-new DataView(nonceBytes.buffer).setBigUint64(0, BigInt(nonce));
-
-console.log('[HASH DEBUG]', {
-  actionHex:  Buffer.from(actionBytes).toString('hex'),
-  actionLength: actionBytes.length,
+//Diagnostic bytes
+const actionBytes = encodeMsgpack(action);
+const hexStr = Array.from(actionBytes).map(b => b.toString(16).padStart(2,'0')).join('');
+console.log('[HASH DEBUG msgpack]', {
+  actionHex: hexStr,
   assetIndex,
-  // Pour BTC (a=0) on attend: la valeur msgpack de 0 = 0x00 (1 octet)
-  // Pour GOLD (a=100003) on attend: uint32 = 0xce 00 01 86 a3 (5 octets)
+  // uint32 correct  : ...ce00_0186a3... attendu pour a=100003
+  // float64 incorrect: ...cb4018_6a3000000000... si encodé en double
 });
     
     const signature = await signL1Action({
