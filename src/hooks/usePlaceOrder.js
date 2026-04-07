@@ -276,8 +276,8 @@ export function usePlaceOrder() {
     };
 
     // Pas de champ 'dex' — le mapping agent→vault est géré via agentEnableDexAbstraction
-    const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    const nonce  = Date.now();
+   // const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
+  //  const nonce  = Date.now();
 
 
         const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
