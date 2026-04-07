@@ -1,7 +1,7 @@
 // src/hooks/usePlaceOrder.js
 
 //import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
-import { signL1Action } from '@nktkas/hyperliquid/signing';
+//import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
