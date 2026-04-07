@@ -297,6 +297,17 @@ console.log('[ACTION HASH]', createL1ActionHash({
   action, nonce, 
   ...(vaultAddress ? { vaultAddress } : {}) 
 }));
+
+    const wallet = privateKeyToAccount(agentPrivateKey);
+
+// ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
+console.log('[WALLET CHECK]', {
+  walletAddress:    wallet.address,
+  expectedAgent:   '0xf6980485d36079a862fba6d84e067805612caf3c',
+  keyMatch:         wallet.address.toLowerCase() === '0xf6980485d36079a862fba6d84e067805612caf3c',
+  keyLength:        agentPrivateKey?.length,
+  keyPrefix:        agentPrivateKey?.substring(0, 4),
+});
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
