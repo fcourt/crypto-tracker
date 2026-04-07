@@ -239,7 +239,9 @@ export function usePlaceOrder() {
     const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
     const extApiKey       = readExtApiKey();
     const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
-    const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
+   // const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
+
+    const vaultAddress = null; // localStorage.getItem('hl_vault_address')?.trim() || null;
 
     // ← hlKey ajouté ici
     const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
