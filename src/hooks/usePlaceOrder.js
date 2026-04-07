@@ -272,19 +272,9 @@ export function usePlaceOrder() {
       t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
     };
 
-    // dex field requis dans le hash msgpack pour les marchés HIP-3
-    const dex = hlKey?.startsWith('xyz:')  ? 'xyz'
-              : hlKey?.startsWith('hyna:') ? 'hyna'
-              : undefined;
-
-    const action = {
-      type: 'order',
-      orders: [orderEntry],
-      grouping: 'na',
-      ...(dex ? { dex } : {}),
-    };
-
-    const nonce = Date.now();
+    // Pas de champ 'dex' — le mapping agent→vault est géré via agentEnableDexAbstraction
+    const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    const nonce  = Date.now();
 
     const signature = await signL1Action({
       wallet, action, nonce,
