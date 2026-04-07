@@ -6,6 +6,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
+import { signL1Action, createL1ActionHash } from '@nktkas/hyperliquid/signing';
+
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
 
@@ -275,13 +277,7 @@ export function usePlaceOrder() {
     const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce  = Date.now();
 
-//Diagnostic bytes
-const bodyStr = JSON.stringify(body);
-console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
-console.log('[ACTION HASH]', createL1ActionHash({ 
-  action, nonce, 
-  ...(vaultAddress ? { vaultAddress } : {}) 
-}));
+
     
     const signature = await signL1Action({
       wallet, action, nonce,
@@ -291,6 +287,15 @@ console.log('[ACTION HASH]', createL1ActionHash({
     const body = { action, signature, nonce };
     if (vaultAddress) body.vaultAddress = vaultAddress;
 
+
+    //Diagnostic bytes
+const bodyStr = JSON.stringify(body);
+console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
+console.log('[ACTION HASH]', createL1ActionHash({ 
+  action, nonce, 
+  ...(vaultAddress ? { vaultAddress } : {}) 
+}));
+    
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
