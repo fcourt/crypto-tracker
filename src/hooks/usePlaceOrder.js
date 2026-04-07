@@ -5,6 +5,7 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
+import { encode as encodeMsgpack } from '@std/msgpack'; // ou l'import existant du SDK
 
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
@@ -276,6 +277,21 @@ export function usePlaceOrder() {
     const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
     const nonce  = Date.now();
 
+// ─── DIAGNOSTIC MSGPACK ───────────────────────────────────
+import { encode as encodeMsgpack } from '@std/msgpack'; // ou l'import existant du SDK
+
+const actionBytes  = encodeMsgpack(action);
+const nonceBytes   = new Uint8Array(8);
+new DataView(nonceBytes.buffer).setBigUint64(0, BigInt(nonce));
+
+console.log('[HASH DEBUG]', {
+  actionHex:  Buffer.from(actionBytes).toString('hex'),
+  actionLength: actionBytes.length,
+  assetIndex,
+  // Pour BTC (a=0) on attend: la valeur msgpack de 0 = 0x00 (1 octet)
+  // Pour GOLD (a=100003) on attend: uint32 = 0xce 00 01 86 a3 (5 octets)
+});
+    
     const signature = await signL1Action({
       wallet, action, nonce,
       ...(vaultAddress ? { vaultAddress } : {}),
