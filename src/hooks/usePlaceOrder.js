@@ -298,9 +298,7 @@ console.log('[ACTION HASH]', createL1ActionHash({
   ...(vaultAddress ? { vaultAddress } : {}) 
 }));
 
-    const wallet = privateKeyToAccount(agentPrivateKey);
-
-// ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
+    // ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
 console.log('[WALLET CHECK]', {
   walletAddress:    wallet.address,
   expectedAgent:   '0xf6980485d36079a862fba6d84e067805612caf3c',
