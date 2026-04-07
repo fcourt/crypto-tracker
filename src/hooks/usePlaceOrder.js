@@ -314,6 +314,7 @@ console.log('[WALLET CHECK]', {
     });
 
     const text = await res.text();
+    console.log('[HL RESPONSE]', res.status, text); // ← ajoute cette ligne
     let result;
     try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
