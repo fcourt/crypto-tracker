@@ -5,8 +5,6 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
-// Accès direct à l'encodeur interne du SDK
-import { encode as encodeMsgpack } from '@nktkas/hyperliquid/deps/jsr.io/@std/msgpack/1.0.3/encode.js';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -278,14 +276,12 @@ export function usePlaceOrder() {
     const nonce  = Date.now();
 
 //Diagnostic bytes
-const actionBytes = encodeMsgpack(action);
-const hexStr = Array.from(actionBytes).map(b => b.toString(16).padStart(2,'0')).join('');
-console.log('[HASH DEBUG msgpack]', {
-  actionHex: hexStr,
-  assetIndex,
-  // uint32 correct  : ...ce00_0186a3... attendu pour a=100003
-  // float64 incorrect: ...cb4018_6a3000000000... si encodé en double
-});
+const bodyStr = JSON.stringify(body);
+console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
+console.log('[ACTION HASH]', createL1ActionHash({ 
+  action, nonce, 
+  ...(vaultAddress ? { vaultAddress } : {}) 
+}));
     
     const signature = await signL1Action({
       wallet, action, nonce,
