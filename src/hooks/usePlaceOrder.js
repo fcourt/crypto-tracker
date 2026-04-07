@@ -103,9 +103,7 @@ function readExtApiKey() {
 // ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
 export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = null) {
   const wallet    = privateKeyToAccount(agentPrivateKey);
-  const rawAction = { type: 'agentEnableDexAbstraction' };
-  const action = actionSorter.order(rawAction); // trier aussi
- // const action    = { type: 'agentEnableDexAbstraction' };
+  const action    = { type: 'agentEnableDexAbstraction' };
   const nonce     = Date.now();
   const signature = await signL1Action(
     vaultAddress ? { wallet, action, nonce, vaultAddress } : { wallet, action, nonce }
