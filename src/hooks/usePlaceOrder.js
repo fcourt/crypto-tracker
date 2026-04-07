@@ -299,9 +299,7 @@ export function usePlaceOrder() {
     //Diagnostic bytes
 const bodyStr = JSON.stringify(body);
 console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
-console.log('[ACTION HASH]', createL1ActionHash({ 
-  action, nonce, 
-  ...(vaultAddress ? { vaultAddress } : {}) 
+    console.log('[HL RESPONSE]', ...); // ← déjà après le fetch
 }));
 
     // ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
