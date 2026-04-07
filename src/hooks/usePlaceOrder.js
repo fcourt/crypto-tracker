@@ -299,7 +299,6 @@ export function usePlaceOrder() {
     //Diagnostic bytes
 const bodyStr = JSON.stringify(body);
 console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
-    console.log('[HL RESPONSE]', ...); // ← déjà après le fetch
 }));
 
     // ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
