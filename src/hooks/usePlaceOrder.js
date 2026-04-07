@@ -6,7 +6,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
-import { signL1Action, createL1ActionHash } from '@nktkas/hyperliquid/signing';
+import { signL1Action, createL1ActionHash, actionSorter } from '@nktkas/hyperliquid/signing';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -103,7 +103,9 @@ function readExtApiKey() {
 // ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
 export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = null) {
   const wallet    = privateKeyToAccount(agentPrivateKey);
-  const action    = { type: 'agentEnableDexAbstraction' };
+  const rawAction = { type: 'agentEnableDexAbstraction' };
+  const action = actionSorter.order(rawAction); // trier aussi
+ // const action    = { type: 'agentEnableDexAbstraction' };
   const nonce     = Date.now();
   const signature = await signL1Action(
     vaultAddress ? { wallet, action, nonce, vaultAddress } : { wallet, action, nonce }
@@ -239,9 +241,7 @@ export function usePlaceOrder() {
     const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
     const extApiKey       = readExtApiKey();
     const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
-   // const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
-
-    const vaultAddress = null; // localStorage.getItem('hl_vault_address')?.trim() || null;
+    const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
 
     // ← hlKey ajouté ici
     const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
@@ -280,16 +280,24 @@ export function usePlaceOrder() {
     const nonce  = Date.now();
 
 
-    
+        const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    const action = actionSorter.order(rawAction);  // ← AJOUT CRITIQUE
+    const nonce  = Date.now();
+
+    // Diagnostic (optionnel, même action triée pour les deux)
+    console.log('[ACTION HASH]', createL1ActionHash({
+      action, nonce,
+      ...(vaultAddress ? { vaultAddress } : {}),
+    }));
+
     const signature = await signL1Action({
       wallet, action, nonce,
       ...(vaultAddress ? { vaultAddress } : {}),
     });
 
-    const body = { action, signature, nonce };
+    const body = { action, signature, nonce }; // ← même action triée
     if (vaultAddress) body.vaultAddress = vaultAddress;
-
-
+    
     //Diagnostic bytes
 const bodyStr = JSON.stringify(body);
 console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
