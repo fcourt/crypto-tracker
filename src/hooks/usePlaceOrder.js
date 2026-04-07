@@ -278,8 +278,6 @@ export function usePlaceOrder() {
     const nonce  = Date.now();
 
 // ─── DIAGNOSTIC MSGPACK ───────────────────────────────────
-import { encode as encodeMsgpack } from '@std/msgpack'; // ou l'import existant du SDK
-
 const actionBytes  = encodeMsgpack(action);
 const nonceBytes   = new Uint8Array(8);
 new DataView(nonceBytes.buffer).setBigUint64(0, BigInt(nonce));
