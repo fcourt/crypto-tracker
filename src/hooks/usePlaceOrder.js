@@ -1,6 +1,7 @@
 // src/hooks/usePlaceOrder.js
 
-import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+//import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+import { order as hlOrderRaw, HttpTransport } from '@nktkas/hyperliquid';
 import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
@@ -254,6 +255,32 @@ export function usePlaceOrder() {
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
+/*    const isHip3 = assetIndex >= 100000;
+
+    if (isHip3) {
+  const transport = new HttpTransport();
+  const result = await hlOrderRaw(
+    { transport, wallet, ...(vaultAddress ? { vaultAddress } : {}) },
+    {
+      orders: [{
+        a: assetIndex,
+        b: isBuy,
+        p: limitPrice.toFixed(pxDecimals ?? 2),
+        s: size.toFixed(szDecimals ?? 6),
+        r: params.reduceOnly ?? false,
+        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+      }],
+      grouping: 'na',
+    }
+  );
+  console.log('[HL HIP3 RESPONSE]', result);
+  return result;
+}
+
+
+
+    
+    // Crypto natif : ExchangeClient (indices 0-9999)
     const client = new ExchangeClient({
       wallet,
       transport: new HttpTransport(),
@@ -275,6 +302,35 @@ export function usePlaceOrder() {
 
     console.log('[HL RESPONSE]', result);
     return result;
+    */
+
+        // Un seul path pour tout HL, crypto ET HIP-3
+    const client = new ExchangeClient({
+      wallet,
+      transport: new HttpTransport(),
+      defaultVaultAddress: vaultAddress ?? undefined,
+    });
+
+        try {
+      const result = await client.order({
+        orders: [{
+          a: assetIndex,
+          b: isBuy,
+          p: limitPrice.toFixed(pxDecimals ?? 2),
+          s: size.toFixed(szDecimals ?? 6),
+          r: params.reduceOnly ?? false,
+          t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+        }],
+        grouping: 'na',
+      });
+      console.log('[HL RESPONSE]', JSON.stringify(result));
+      return result;
+    } catch (e) {
+      console.log('[HL ERROR]', e.message);
+      console.log('[HL ERROR STACK]', e.stack?.substring(0, 300));
+      throw new Error(e.message);
+    }
+
   };
 
   return {
