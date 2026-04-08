@@ -1,13 +1,12 @@
 // src/hooks/usePlaceOrder.js
 
-//import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
-import { order as hlOrderRaw, HttpTransport } from '@nktkas/hyperliquid';
+import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
 import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
-// ─── Stark prime (felt252) pour encoder les montants signés ──────────────
+// ─── Stark prime (felt252) ────────────────────────────────────────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
 
 const ORDER_SELECTOR  = '0x36da8d51815527cabfaa9c982f564c80fa7429616739306036f1f9b608dd112';
@@ -87,7 +86,6 @@ function parseCollateral(syntheticAbs, priceStr, collatRes, synthRes) {
   return syntheticAbs * priceInt;
 }
 
-// ─── Lecture des clés — toujours fraîche depuis localStorage ─────────────
 function readExtApiKey() {
   return (
     localStorage.getItem('ext_api_key') ||
@@ -98,7 +96,7 @@ function readExtApiKey() {
   );
 }
 
-// ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
+// ─── Activer HIP-3 sur l'agent (one-shot) ────────────────────────────────
 export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = null) {
   const wallet    = privateKeyToAccount(agentPrivateKey);
   const action    = { type: 'agentEnableDexAbstraction' };
@@ -249,69 +247,19 @@ export function usePlaceOrder() {
       });
     }
 
-    // ─── Ordre Hyperliquid via ExchangeClient ──────────────────────────────
+    // ─── Ordre Hyperliquid (crypto + HIP-3) ───────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-/*    const isHip3 = assetIndex >= 100000;
-
-    if (isHip3) {
-  const transport = new HttpTransport();
-  const result = await hlOrderRaw(
-    { transport, wallet, ...(vaultAddress ? { vaultAddress } : {}) },
-    {
-      orders: [{
-        a: assetIndex,
-        b: isBuy,
-        p: limitPrice.toFixed(pxDecimals ?? 2),
-        s: size.toFixed(szDecimals ?? 6),
-        r: params.reduceOnly ?? false,
-        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-      }],
-      grouping: 'na',
-    }
-  );
-  console.log('[HL HIP3 RESPONSE]', result);
-  return result;
-}
-
-
-
-    
-    // Crypto natif : ExchangeClient (indices 0-9999)
-    const client = new ExchangeClient({
-      wallet,
-      transport: new HttpTransport(),
-      defaultVaultAddress: vaultAddress ?? undefined,  // ← "default" devant
-    });
-
-    const result = await client.order({
-      orders: [{
-        a: assetIndex,
-        b: isBuy,
-        p: limitPrice.toFixed(pxDecimals ?? 2),
-        s: size.toFixed(szDecimals ?? 6),
-        r: params.reduceOnly ?? false,
-        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-      }],
-      grouping: 'na',
-      // pas de vaultAddress ici — defaultVaultAddress du constructeur s'applique
-    });
-
-    console.log('[HL RESPONSE]', result);
-    return result;
-    */
-
-        // Un seul path pour tout HL, crypto ET HIP-3
     const client = new ExchangeClient({
       wallet,
       transport: new HttpTransport(),
       defaultVaultAddress: vaultAddress ?? undefined,
     });
 
-        try {
+    try {
       const result = await client.order({
         orders: [{
           a: assetIndex,
@@ -330,7 +278,6 @@ export function usePlaceOrder() {
       console.log('[HL ERROR STACK]', e.stack?.substring(0, 300));
       throw new Error(e.message);
     }
-
   };
 
   return {
