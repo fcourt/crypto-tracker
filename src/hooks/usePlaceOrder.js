@@ -1,14 +1,12 @@
 // src/hooks/usePlaceOrder.js
 
-//import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
-//import { signL1Action } from '@nktkas/hyperliquid/signing';
+import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
+import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
-import { signL1Action, createL1ActionHash } from '@nktkas/hyperliquid/signing';
-
-// ─── Stark prime (felt252) pour encoder les montants signés ───────────────
+// ─── Stark prime (felt252) pour encoder les montants signés ──────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
 
 const ORDER_SELECTOR  = '0x36da8d51815527cabfaa9c982f564c80fa7429616739306036f1f9b608dd112';
@@ -16,18 +14,6 @@ const DOMAIN_SELECTOR = '0x1ff2f602e42168014d405a94f75e8a93d640751d71d16311266e1
 
 const EXT_API_BASE          = '/api/extended';
 const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600;
-
-
-    // Helper manuel — ordre canonique HL
-function sortOrderAction(rawAction) {
-  return {
-    type:     rawAction.type,
-    grouping: rawAction.grouping,
-    orders:   rawAction.orders.map(o => ({
-      a: o.a, b: o.b, p: o.p, s: o.s, r: o.r, t: o.t,
-    })),
-  };
-}
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -102,7 +88,6 @@ function parseCollateral(syntheticAbs, priceStr, collatRes, synthRes) {
 
 // ─── Lecture des clés — toujours fraîche depuis localStorage ─────────────
 function readExtApiKey() {
-  // Priorité : nouvelle clé simple → ancien format tableau
   return (
     localStorage.getItem('ext_api_key') ||
     (() => {
@@ -124,7 +109,8 @@ export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = 
   if (vaultAddress) body.vaultAddress = vaultAddress;
 
   const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -210,14 +196,6 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
     },
   };
 
-  console.log('=== Extended Order Debug ===');
-  console.log('baseAmount (signed):', baseAmount, '| quoteAmount (signed):', quoteAmount, '| feeAmount:', feeAmount);
-  console.log('expirationSecs:', expirationSecs, '| nonce:', nonce);
-  console.log('domainHash:', domainHash);
-  console.log('orderHash:', orderHash);
-  console.log('msgHash:', msgHash);
-  console.log('payload:', JSON.stringify(payload, null, 2));
-
   const res = await fetch(
     `${EXT_API_BASE}?endpoint=${encodeURIComponent('/api/v1/user/order')}`,
     {
@@ -247,15 +225,15 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 export function usePlaceOrder() {
 
   const placeOrder = async (params) => {
-    const starkPrivateKey = localStorage.getItem('ext_stark_pk')     || '';
-    const l2Vault         = localStorage.getItem('ext_l2_vault')     || '';
+    const starkPrivateKey = localStorage.getItem('ext_stark_pk') || '';
+    const l2Vault         = localStorage.getItem('ext_l2_vault') || '';
     const extApiKey       = readExtApiKey();
-    const agentPrivateKey = localStorage.getItem('hl_agent_pk')      || '';
-    const vaultAddress = localStorage.getItem('hl_vault_address')?.trim() || null;
+    const agentPrivateKey = localStorage.getItem('hl_agent_pk') || '';
+    const vaultAddress    = localStorage.getItem('hl_vault_address')?.trim() || null;
 
-    // ← hlKey ajouté ici
-    const { platformId, hlKey, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
+    const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
 
+    // ─── Ordre Extended Exchange ───────────────────────────────────────────
     if (platformId === 'extended') {
       if (!starkPrivateKey || !l2Vault) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
       return await placeExtendedOrder({
@@ -270,74 +248,31 @@ export function usePlaceOrder() {
       });
     }
 
-        // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
+    // ─── Ordre Hyperliquid via ExchangeClient ──────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
-    const orderEntry = {
-      a: assetIndex,
-      b: isBuy,
-      p: limitPrice.toFixed(pxDecimals ?? 2),
-      s: size.toFixed(szDecimals ?? 6),
-      r: params.reduceOnly ?? false,
-      t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-    };
-
-    // Pas de champ 'dex' — le mapping agent→vault est géré via agentEnableDexAbstraction
-   // const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
-  //  const nonce  = Date.now();
-
-
-    //    const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    //const action = actionSorter.order(rawAction);  // ← AJOUT CRITIQUE
-    //const nonce  = Date.now();
-
-// Dans placeOrder :
-const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
-const action    = sortOrderAction(rawAction); // ← remplace actionSorter.order()
-        const nonce  = Date.now();
-
-
-    // Diagnostic (optionnel, même action triée pour les deux)
-    console.log('[ACTION HASH]', createL1ActionHash({
-      action, nonce,
-      ...(vaultAddress ? { vaultAddress } : {}),
-    }));
-
-    const signature = await signL1Action({
-      wallet, action, nonce,
+    const client = new ExchangeClient({
+      wallet,
+      transport: new HttpTransport(),
       ...(vaultAddress ? { vaultAddress } : {}),
     });
 
-    const body = { action, signature, nonce }; // ← même action triée
-    if (vaultAddress) body.vaultAddress = vaultAddress;
-    
-    //Diagnostic bytes
-const bodyStr = JSON.stringify(body);
-console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
-
-    // ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
-console.log('[WALLET CHECK]', {
-  walletAddress:    wallet.address,
-  expectedAgent:   '0xf6980485d36079a862fba6d84e067805612caf3c',
-  keyMatch:         wallet.address.toLowerCase() === '0xf6980485d36079a862fba6d84e067805612caf3c',
-  keyLength:        agentPrivateKey?.length,
-  keyPrefix:        agentPrivateKey?.substring(0, 4),
-});
-    
-    const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+    const result = await client.order({
+      orders: [{
+        a: assetIndex,
+        b: isBuy,
+        p: limitPrice.toFixed(pxDecimals ?? 2),
+        s: size.toFixed(szDecimals ?? 6),
+        r: params.reduceOnly ?? false,
+        t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+      }],
+      grouping: 'na',
     });
 
-    const text = await res.text();
-    console.log('[HL RESPONSE]', res.status, text); // ← ajoute cette ligne
-    let result;
-    try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
-    if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
+    console.log('[HL RESPONSE]', result);
     return result;
   };
 
