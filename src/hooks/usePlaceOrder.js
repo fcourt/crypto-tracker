@@ -6,7 +6,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
-import { signL1Action, createL1ActionHash, actionSorter } from '@nktkas/hyperliquid/signing';
+import { signL1Action, createL1ActionHash } from '@nktkas/hyperliquid/signing';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -16,6 +16,18 @@ const DOMAIN_SELECTOR = '0x1ff2f602e42168014d405a94f75e8a93d640751d71d16311266e1
 
 const EXT_API_BASE          = '/api/extended';
 const SERVER_CLOCK_OFFSET_S = 14 * 24 * 3600;
+
+
+    // Helper manuel — ordre canonique HL
+function sortOrderAction(rawAction) {
+  return {
+    type:     rawAction.type,
+    grouping: rawAction.grouping,
+    orders:   rawAction.orders.map(o => ({
+      a: o.a, b: o.b, p: o.p, s: o.s, r: o.r, t: o.t,
+    })),
+  };
+}
 
 function generateNonce() {
   return Math.floor(Math.random() * (2 ** 31 - 1)) + 1;
@@ -278,9 +290,15 @@ export function usePlaceOrder() {
   //  const nonce  = Date.now();
 
 
-        const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    const action = actionSorter.order(rawAction);  // ← AJOUT CRITIQUE
-    const nonce  = Date.now();
+    //    const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    //const action = actionSorter.order(rawAction);  // ← AJOUT CRITIQUE
+    //const nonce  = Date.now();
+
+// Dans placeOrder :
+const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
+const action    = sortOrderAction(rawAction); // ← remplace actionSorter.order()
+        const nonce  = Date.now();
+
 
     // Diagnostic (optionnel, même action triée pour les deux)
     console.log('[ACTION HASH]', createL1ActionHash({
