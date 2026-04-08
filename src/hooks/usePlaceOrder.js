@@ -257,7 +257,7 @@ export function usePlaceOrder() {
     const client = new ExchangeClient({
       wallet,
       transport: new HttpTransport(),
-      // ← retirer vaultAddress d'ici
+      defaultVaultAddress: vaultAddress ?? undefined,  // ← "default" devant
     });
 
     const result = await client.order({
@@ -270,7 +270,7 @@ export function usePlaceOrder() {
         t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
       }],
       grouping: 'na',
-      ...(vaultAddress ? { vaultAddress } : {}),  // ← ici
+      // pas de vaultAddress ici — defaultVaultAddress du constructeur s'applique
     });
 
     console.log('[HL RESPONSE]', result);
