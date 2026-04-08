@@ -68,50 +68,30 @@ export function useHLMargin(mainAddress, vaultAddress) {
     const validMain  = !!(main  && /^0x[0-9a-fA-F]{40}$/i.test(main));
     const validVault = !!(vault && /^0x[0-9a-fA-F]{40}$/i.test(vault));
 
-    if (!validMain && !validVault) { setMargin(null); setEffectiveAddress(null); return; }
-    setEffectiveAddress(validVault ? vault : main);
+    if (!validMain && !validVault) {
+      setMargin(null);
+      setEffectiveAddress(null);
+      return;
+    }
+
+    const addr = validVault ? vault : main;
+    setEffectiveAddress(addr);
 
     let cancelled = false;
     const run = async () => {
       try {
-        if (validVault && validMain) {
-          const r1   = await fetch(HL_API, {
+        const res   = await fetch(HL_API, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ type: 'subAccounts', user: main.toLowerCase() }),
+          body:    JSON.stringify({ type: 'clearinghouseState', user: addr.toLowerCase() }),
         });
-      const data = await r1.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const sub = data.find(s => s.subAccountUser?.toLowerCase() === vault.toLowerCase());
-            if (sub) {
-              const cs       = sub.clearinghouseState;
-              const perpFree = parseFloat(cs?.marginSummary?.accountValue    || 0)
-                         - parseFloat(cs?.marginSummary?.totalMarginUsed || 0);
-              const spotUsdc = (sub.spotState?.balances || []).find(b => b.coin === 'USDC');
-              const spotFree = parseFloat(spotUsdc?.total || 0);
-              if (!cancelled) setMargin(perpFree > 0 ? perpFree : spotFree);
-              return;
-            }
-          }
+        const state = await res.json();
+        if (!cancelled) setMargin(parseFloat(state?.withdrawable ?? 0));
+      } catch (e) {
+        console.error('[HL margin] error:', e.message);
+        if (!cancelled) setMargin(null);
       }
-
-    const addr  = (validVault ? vault : main).toLowerCase();
-    const r2    = await fetch(HL_API, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ type: 'clearinghouseState', user: addr }),
-    });
-    const state = await r2.json();
-    const cross = parseFloat(state?.crossMarginSummary?.accountValue    || 0)
-                - parseFloat(state?.crossMarginSummary?.totalMarginUsed || 0);
-    const total = parseFloat(state?.marginSummary?.accountValue    || 0)
-                - parseFloat(state?.marginSummary?.totalMarginUsed || 0);
-    if (!cancelled) setMargin(cross > 0 ? cross : total);
-  } catch (e) {
-    console.error('[HL margin] error:', e.message);
-    if (!cancelled) setMargin(null);
-  }
-};
+    };
 
     run();
     const t = setInterval(run, 15000);
