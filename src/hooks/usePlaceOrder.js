@@ -1,12 +1,11 @@
 // src/hooks/usePlaceOrder.js
 
 //import { ExchangeClient, HttpTransport } from '@nktkas/hyperliquid';
-//import { signL1Action } from '@nktkas/hyperliquid/signing';
+import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 
-import { signL1Action, createL1ActionHash, actionSorter } from '@nktkas/hyperliquid/signing';
 
 // ─── Stark prime (felt252) pour encoder les montants signés ───────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -101,26 +100,23 @@ function readExtApiKey() {
 }
 
 // ─── Activer HIP-3 sur l'agent (one-shot, appeler une seule fois) ─────────
-export async function enableAgentDexAbstraction(agentPrivateKey, vaultAddress = null) {
+export async function enableAgentDexAbstraction(agentPrivateKey) {
   const wallet    = privateKeyToAccount(agentPrivateKey);
   const action    = { type: 'agentEnableDexAbstraction' };
   const nonce     = Date.now();
-  const signature = await signL1Action(
-    vaultAddress ? { wallet, action, nonce, vaultAddress } : { wallet, action, nonce }
-  );
-  const body = { action, signature, nonce };
-  if (vaultAddress) body.vaultAddress = vaultAddress;
+  const signature = await signL1Action({ wallet, action, nonce });
 
   const res = await fetch('https://api.hyperliquid.xyz/exchange', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ action, signature, nonce }),
   });
   const text = await res.text();
   let result;
   try { result = JSON.parse(text); } catch { throw new Error(text); }
   if (result?.status === 'err') {
-    const msg = result?.response ?? '';
-    if (msg.includes('transition not allowed')) return result;
+  const msg = result?.response ?? '';
+  if (msg.includes('transition not allowed')) return result; // déjà activé, pas une erreur
     throw new Error(msg || 'Erreur agentEnableDexAbstraction');
   }
   return result;
@@ -258,65 +254,40 @@ export function usePlaceOrder() {
       });
     }
 
-        // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
+    // ─── Ordre Hyperliquid ─────────────────────────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
-    const wallet  = privateKeyToAccount(agentPrivateKey);
-    const isMaker = !params.orderType || params.orderType === 'maker';
+const wallet  = privateKeyToAccount(agentPrivateKey);
+const isMaker = !params.orderType || params.orderType === 'maker';
 
-    const orderEntry = {
-      a: assetIndex,
-      b: isBuy,
-      p: limitPrice.toFixed(pxDecimals ?? 2),
-      s: size.toFixed(szDecimals ?? 6),
-      r: params.reduceOnly ?? false,
-      t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
-    };
-
-    // Pas de champ 'dex' — le mapping agent→vault est géré via agentEnableDexAbstraction
-   // const action = { type: 'order', orders: [orderEntry], grouping: 'na' };
-  //  const nonce  = Date.now();
-
-
-        const rawAction = { type: 'order', orders: [orderEntry], grouping: 'na' };
-    const action = actionSorter.order(rawAction);  // ← AJOUT CRITIQUE
-    const nonce  = Date.now();
-
-    // Diagnostic (optionnel, même action triée pour les deux)
-    console.log('[ACTION HASH]', createL1ActionHash({
-      action, nonce,
-      ...(vaultAddress ? { vaultAddress } : {}),
-    }));
-
+const orderEntry = {
+  a: assetIndex,   // déjà encodé correctement (100003 pour xyz:GOLD)
+  b: isBuy,
+  p: limitPrice.toFixed(pxDecimals ?? 2),
+  s: size.toFixed(szDecimals ?? 6),
+  r: params.reduceOnly ?? false,
+  t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
+};
+    
+    // Un seul chemin pour TOUS les marchés HL (natifs + HIP-3)
+    // signL1Action + fetch direct — évite le strip valibot du SDK
+    const action    = { type: 'order', orders: [orderEntry], grouping: 'na' };
+    const nonce     = Date.now();
     const signature = await signL1Action({
       wallet, action, nonce,
       ...(vaultAddress ? { vaultAddress } : {}),
     });
-
-    const body = { action, signature, nonce }; // ← même action triée
-    if (vaultAddress) body.vaultAddress = vaultAddress;
     
-    //Diagnostic bytes
-const bodyStr = JSON.stringify(body);
-console.log('[REQUEST BODY]', bodyStr.substring(0, 500));
-
-    // ─── VÉRIFICATION CRITIQUE ─────────────────────────────────
-console.log('[WALLET CHECK]', {
-  walletAddress:    wallet.address,
-  expectedAgent:   '0xf6980485d36079a862fba6d84e067805612caf3c',
-  keyMatch:         wallet.address.toLowerCase() === '0xf6980485d36079a862fba6d84e067805612caf3c',
-  keyLength:        agentPrivateKey?.length,
-  keyPrefix:        agentPrivateKey?.substring(0, 4),
-});
+    const body = { action, signature, nonce };
+    if (vaultAddress) body.vaultAddress = vaultAddress;
     
     const res = await fetch('https://api.hyperliquid.xyz/exchange', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     });
-
+    
     const text = await res.text();
-    console.log('[HL RESPONSE]', res.status, text); // ← ajoute cette ligne
     let result;
     try { result = JSON.parse(text); } catch { throw new Error(text || `HL HTTP ${res.status}`); }
     if (result?.status === 'err') throw new Error(result?.response ?? 'Erreur HL inconnue');
