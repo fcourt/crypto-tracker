@@ -5,42 +5,49 @@ import { HL_API } from '../utils/dnHelpers';
 async function fetchHLPositions(address) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
-    const res   = await fetch(HL_API, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
-    });
-    const state = await res.json();
+    // ─── Call natif HL + call HIP-3 xyz en parallèle ─────────────────
+    const [resNative, resXyz] = await Promise.all([
+      fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
+      }),
+      fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim(), dex: 'xyz' }),
+      }),
+    ]);
 
-// ─── LOG DIAGNOSTIC ──────────────────────────────────────────────────
-    console.log('[fetchHLPositions] raw keys for', address.slice(0, 8), ':', Object.keys(state));
-    console.log('[fetchHLPositions] assetPositions:', state?.assetPositions?.length ?? 0);
-    // Cherche d'autres champs potentiels pour HIP-3
-    if (state?.dexPositions)    console.log('[fetchHLPositions] dexPositions:', state.dexPositions);
-    if (state?.hip3Positions)   console.log('[fetchHLPositions] hip3Positions:', state.hip3Positions);
-    if (state?.perpDexStates)   console.log('[fetchHLPositions] perpDexStates:', state.perpDexStates);
-    // ─────────────────────────────────────────────────────────────────────
-    
-    return (state?.assetPositions || [])
-      .filter(p => parseFloat(p.position?.szi) !== 0)
-      .map(p => {
-        const coin     = p.position.coin;
-        const szi      = parseFloat(p.position.szi);
-        const platform = coin.startsWith('xyz:')  ? 'xyz'
-                       : coin.startsWith('hyna:') ? 'hyena'
-                       : 'hyperliquid';
-        const market   = MARKETS.find(m => m.hlKey === coin);
-        return {
-          platform,
-          coin,
-          marketId:      market?.id ?? null,
-          label:         market?.label ?? coin,
-          side:          szi > 0 ? 'LONG' : 'SHORT',
-          szi:           Math.abs(szi),
-          entryPx:       parseFloat(p.position.entryPx || 0),
-          unrealizedPnl: parseFloat(p.position.unrealizedPnl || 0),
-        };
-      });
+    const [stateNative, stateXyz] = await Promise.all([
+      resNative.json(),
+      resXyz.json(),
+    ]);
+
+    const parsePositions = (state) =>
+      (state?.assetPositions || [])
+        .filter(p => parseFloat(p.position?.szi) !== 0)
+        .map(p => {
+          const coin     = p.position.coin;
+          const szi      = parseFloat(p.position.szi);
+          const platform = coin.startsWith('xyz:')  ? 'xyz'
+                         : coin.startsWith('hyna:') ? 'hyena'
+                         : 'hyperliquid';
+          const market   = MARKETS.find(m => m.hlKey === coin);
+          return {
+            platform,
+            coin,
+            marketId:      market?.id ?? null,
+            label:         market?.label ?? coin,
+            side:          szi > 0 ? 'LONG' : 'SHORT',
+            szi:           Math.abs(szi),
+            entryPx:       parseFloat(p.position.entryPx || 0),
+            unrealizedPnl: parseFloat(p.position.unrealizedPnl || 0),
+          };
+        });
+
+    return [...parsePositions(stateNative), ...parsePositions(stateXyz)];
+
   } catch (e) { console.warn('fetchHLPositions error:', e.message); return []; }
 }
 
