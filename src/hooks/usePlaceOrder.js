@@ -6,6 +6,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
 import { getMarkets } from './useMarkets';
+import { roundToHLPrice } from '../utils/dnHelpers';
+
 
 // ─── Stark prime (felt252) ────────────────────────────────────────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -264,6 +266,13 @@ export function usePlaceOrder() {
     // ─── Ordre Hyperliquid (crypto + HIP-3) ───────────────────────────────
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
+    // Arrondi HL obligatoire (tick size valide)
+    const roundedPrice = roundToHLPrice(limitPrice);
+    const roundedSize  = parseFloat(size.toFixed(szDecimals ?? 6));
+
+    console.log(`[placeOrder HL] ${market.label} | index: ${assetIndex} | price: 
+    ${limitPrice} → ${roundedPrice} | size: ${size} → ${roundedSize}`);
+    
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
@@ -278,8 +287,8 @@ export function usePlaceOrder() {
         orders: [{
           a: assetIndex,
           b: isBuy,
-          p: limitPrice.toFixed(pxDecimals ?? 2),
-          s: size.toFixed(szDecimals ?? 6),
+          p: roundedPrice.toFixed(pxDecimals ?? 2),   // ← roundedPrice
+          s: roundedSize.toFixed(szDecimals ?? 6),    // ← roundedSize
           r: params.reduceOnly ?? false,
           t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
         }],
