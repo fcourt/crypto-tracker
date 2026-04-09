@@ -93,28 +93,48 @@ export default function OpenTradesPanel({ hlAddress, hlVaultAddress, extApiKey, 
   }, [be?.bePx1, be?.bePx2]);
 
   const doClose = async (pos, mode) => {
-    const key = posKey(pos);
-    setFeedback(f => ({ ...f, [key]: null }));
-    setCloseMode(m => ({ ...m, [key]: 'pending' }));
-    try {
-      const lp      = getPrice(pos.marketId, pos.platform);
-      const limitPx = mode === 'limit' ? parseFloat(closePrices[key]) : null;
-      if (mode === 'limit' && (!limitPx || isNaN(limitPx))) throw new Error('Prix limit invalide');
-      const isBuy = pos.side === 'SHORT';
-      const price = mode === 'market'
-        ? (isBuy ? (lp ?? pos.entryPx) * 1.005 : (lp ?? pos.entryPx) * 0.995)
-        : limitPx;
-      const ot = closeOType[key] ?? (mode === 'market' ? 'taker' : 'maker');
-      await placeOrder({ platformId: pos.platform, marketId: pos.marketId, isBuy, size: pos.szi, limitPrice: price, orderType: ot, reduceOnly: true });
-      setFeedback(f => ({ ...f, [key]: { ok: true, msg: '✅ Ordre envoyé' } }));
-      setTimeout(() => load(), 2500);
-    } catch (e) {
-      setFeedback(f => ({ ...f, [key]: { ok: false, msg: `❌ ${e.message}` } }));
-    } finally {
-      setCloseMode(m => ({ ...m, [key]: 'idle' }));
-    }
-  };
+  const key = posKey(pos);
+  setFeedback(f => ({ ...f, [key]: null }));
+  setCloseMode(m => ({ ...m, [key]: 'pending' }));
+  try {
+    const lp      = getPrice(pos.marketId, pos.platform);
+    const limitPx = mode === 'limit' ? parseFloat(closePrices[key]) : null;
 
+    if (mode === 'limit' && (!limitPx || isNaN(limitPx))) throw new Error('Prix limit invalide');
+
+    const isBuy    = pos.side === 'SHORT';
+    const refPrice = lp ?? pos.entryPx;   // fallback sur le prix d'entrée
+
+    // ─── Guard : refPrice doit être valide ────────────────────────────
+    if (!refPrice || isNaN(refPrice) || refPrice <= 0) {
+      throw new Error(`Prix introuvable pour ${pos.label} — réessaie dans 2s`);
+    }
+
+    const price = mode === 'market'
+      ? (isBuy ? refPrice * 1.005 : refPrice * 0.995)
+      : limitPx;
+
+    const ot = closeOType[key] ?? (mode === 'market' ? 'taker' : 'maker');
+
+    await placeOrder({
+      platformId: pos.platform,
+      marketId:   pos.marketId,
+      isBuy,
+      size:        pos.szi,
+      limitPrice:  price,
+      orderType:   ot,
+      reduceOnly:  true,
+    });
+
+    setFeedback(f => ({ ...f, [key]: { ok: true, msg: '✅ Ordre envoyé' } }));
+    setTimeout(() => load(), 2500);
+  } catch (e) {
+    setFeedback(f => ({ ...f, [key]: { ok: false, msg: `❌ ${e.message}` } }));
+  } finally {
+    setCloseMode(m => ({ ...m, [key]: 'idle' }));
+  }
+};
+  
   const doCloseBoth = async (mode) => {
     if (!leg1 || !leg2) return;
     await Promise.allSettled([doClose(leg1, mode), doClose(leg2, mode)]);
