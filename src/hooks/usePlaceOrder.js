@@ -5,6 +5,7 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
+import { getMarkets } from './useMarkets';
 
 // ─── Stark prime (felt252) ────────────────────────────────────────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -230,7 +231,20 @@ export function usePlaceOrder() {
     const agentPrivateKey = localStorage.getItem('hl_agent_pk') || '';
     const vaultAddress    = localStorage.getItem('hl_vault_address')?.trim() || null;
 
-    const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
+    //const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
+
+    // ← params ne fournit plus assetIndex, szDecimals, pxDecimals
+    const { platformId, isBuy, size, limitPrice } = params;
+
+    // ─── Résolution du marché (assetIndex réel via meta HL) ──────────────
+    const allMarkets = await getMarkets();
+    const market     = allMarkets.find(m => m.id === params.marketId);
+    if (!market) throw new Error(`Marché inconnu : ${params.marketId}`);
+
+    const { assetIndex, szDecimals, pxDecimals, extKey } = market;
+    if (platformId === 'hyperliquid' && assetIndex === null) {
+      throw new Error(`Index non résolu pour ${market.label} — réessaie dans 2s`);
+    }
 
     // ─── Ordre Extended Exchange ───────────────────────────────────────────
     if (platformId === 'extended') {
