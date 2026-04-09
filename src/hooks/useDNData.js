@@ -11,6 +11,16 @@ async function fetchHLPositions(address) {
       body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim() }),
     });
     const state = await res.json();
+
+// ─── LOG DIAGNOSTIC ──────────────────────────────────────────────────
+    console.log('[fetchHLPositions] raw keys for', address.slice(0, 8), ':', Object.keys(state));
+    console.log('[fetchHLPositions] assetPositions:', state?.assetPositions?.length ?? 0);
+    // Cherche d'autres champs potentiels pour HIP-3
+    if (state?.dexPositions)    console.log('[fetchHLPositions] dexPositions:', state.dexPositions);
+    if (state?.hip3Positions)   console.log('[fetchHLPositions] hip3Positions:', state.hip3Positions);
+    if (state?.perpDexStates)   console.log('[fetchHLPositions] perpDexStates:', state.perpDexStates);
+    // ─────────────────────────────────────────────────────────────────────
+    
     return (state?.assetPositions || [])
       .filter(p => parseFloat(p.position?.szi) !== 0)
       .map(p => {
