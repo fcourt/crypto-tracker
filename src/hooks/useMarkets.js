@@ -28,20 +28,23 @@ async function buildMarkets() {
 
       const nativeCount = nativeRes.universe?.length ?? 0;
 
+      // HIP-3 : offset officiel = 110000 + dex_position * 10000
+      // xyz est le premier DEX HIP-3 (i=0) → offset = 110000
+      const XYZ_OFFSET = 110000;
       // Map hlKey → assetIndex
       const indexMap = {};
 
       (nativeRes.universe ?? []).forEach((asset, i) => {
         indexMap[asset.name] = i;
       });
-
+      
       (xyzRes.universe ?? []).forEach((asset, i) => {
-        indexMap[asset.name] = nativeCount + i; // ex: 'xyz:GOLD' → 232
+        indexMap[asset.name] = XYZ_OFFSET + i;
       });
 
       console.log('[MARKETS] indexMap sample:', {
-        BTC:       indexMap['BTC'],
-        'xyz:GOLD': indexMap['xyz:GOLD'],
+        BTC:        indexMap['BTC'],
+        'xyz:GOLD': indexMap['xyz:GOLD'],  // doit afficher 110003
       });
 
       // Enrichit MARKETS existant avec assetIndex résolu
