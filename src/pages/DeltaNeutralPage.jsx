@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
+//import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
+import { useLivePrices, PLATFORMS } from '../hooks/useLivePrices';
+import { useMarkets } from '../hooks/useMarkets';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
@@ -30,6 +32,7 @@ export default function DeltaNeutralPage() {
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
   const { getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
+  const { markets } = useMarkets();
 
   // ── Adresses ───────────────────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
@@ -65,7 +68,8 @@ export default function DeltaNeutralPage() {
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
 
-  const market = MARKETS.find(m => m.id === marketId);
+  //const market = MARKETS.find(m => m.id === marketId);
+  const market = markets.find(m => m.id === marketId);
   const plat1  = PLATFORMS.find(p => p.id === platform1);
   const plat2  = PLATFORMS.find(p => p.id === platform2);
   const price1 = getPrice(marketId, platform1);
@@ -202,7 +206,7 @@ export default function DeltaNeutralPage() {
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
 
       <OpenTradeSection
-        market={market} platform1={platform1} platform2={platform2} plat1={plat1} plat2={plat2}
+        markets={markets} market={market} platform1={platform1} platform2={platform2} plat1={plat1} plat2={plat2}
         price1={price1} price2={price2} sizeUSD={sizeUSD} setSizeUSD={setSizeUSD}
         side1={side1} side2={side2} calc={calc} fees={fees}
         useStepSize={useStepSize} setUseStepSize={setUseStepSize} getStepSize={getStepSize}
