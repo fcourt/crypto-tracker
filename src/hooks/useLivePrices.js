@@ -53,6 +53,8 @@ export const PLATFORMS = [
   { id: 'extended',    label: 'Extended',    source: 'ext' },
 ];
 
+const XYZ_OFFSET = 110000;  // ← remplace 100000
+
 // ─── Fetch HL : prix + step sizes (natif + HIP-3 xyz) ────────────────────────
 
 async function fetchHLMids() {
@@ -117,7 +119,7 @@ async function fetchHLMids() {
     stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 2));
   }
   const entry = {
-    index:       100000 + index,   // ← HIP-3 encoded (perp_dex_index=0 pour xyz)
+    index:       XYZ_OFFSET + index,   // ← HIP-3 encoded (perp_dex_index=0 pour xyz)
     szDecimals:  asset.szDecimals  ?? 2,
     pxDecimals:  asset.pxDecimals  ?? 2,
     maxLeverage: asset.maxLeverage ?? null,
