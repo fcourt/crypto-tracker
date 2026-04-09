@@ -181,7 +181,13 @@ export default function DeltaNeutralPage() {
     } finally { setter(false); }
   };
 
-  const handlePlaceBothLegs = async () => {
+  const handlePlaceBothLegs = async () => { 
+    // ← ajoute ce guard
+    if (market?.platform === 'hyperliquid' && market?.assetIndex === null) {
+      setTradeStatus({ type: 'error', msg: '❌ Indices en cours de résolution, réessaie dans 2s' });
+      return;
+    }
+    
     setPlacingLeg1(true); setPlacingLeg2(true); setTradeStatus(null);
     try {
       await Promise.all([
