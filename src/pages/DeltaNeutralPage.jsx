@@ -17,7 +17,7 @@ function PriceDot({ fresh }) {
 }
 
 export default function DeltaNeutralPage() {
-  const [marketId,        setMarketId]        = useState('btc');
+  const [marketId,        setMarketId]        = useState('BTC');
   const [platform1,       setPlatform1]       = useState('hyperliquid');
   const [platform2,       setPlatform2]       = useState('extended');
   const [sizeUSD,         setSizeUSD]         = useState('');
