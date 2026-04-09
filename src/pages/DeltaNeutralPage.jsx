@@ -17,7 +17,7 @@ function PriceDot({ fresh }) {
 }
 
 export default function DeltaNeutralPage() {
-  const [marketId,        setMarketId]        = useState('BTC');
+  const [marketId,        setMarketId]        = useState('btc');
   const [platform1,       setPlatform1]       = useState('hyperliquid');
   const [platform2,       setPlatform2]       = useState('extended');
   const [sizeUSD,         setSizeUSD]         = useState('');
@@ -33,6 +33,12 @@ export default function DeltaNeutralPage() {
 
   const { getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
   const { markets } = useMarkets();
+
+  useEffect(() => {
+    if (markets.length > 0 && !markets.find(m => m.id === marketId)) {
+      setMarketId(markets[0].id);
+    }
+  }, [markets]);
 
   // ── Adresses ───────────────────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
@@ -113,6 +119,9 @@ export default function DeltaNeutralPage() {
   };
 
   const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
+
+    if (!market) throw new Error('Marché non résolu');  // ← guard
+    
     const hlKey  = market?.hlKey;
     const meta   = getAssetMeta(hlKey);
 
@@ -138,7 +147,8 @@ export default function DeltaNeutralPage() {
 
     return {
       platformId,
-      hlKey,
+      //hlKey,
+      marketId,
       extKey:     market?.extKey,
       //assetIndex: meta?.index ?? 0,
       isBuy:      side === 'LONG',
@@ -152,6 +162,10 @@ export default function DeltaNeutralPage() {
   };
 
   const handlePlaceLeg = async (legNum) => {
+     if (!market) {
+    setTradeStatus({ type: 'error', msg: '❌ Marchés en cours de chargement, réessaie dans 2s' });
+    return;
+  }
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
     const side       = legNum === 1 ? side1 : side2;
