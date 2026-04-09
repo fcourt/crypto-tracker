@@ -152,7 +152,13 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    console.log('[OpenPositions] fetch:', { mainAddress, vaultAddress, extApiKey: !!extApiKey });
+    // ─── Vérification des adresses au moment du clic ─────────────────────
+  console.log('[OpenPositions] adresses au moment du load:', {
+    mainAddress,
+    vaultAddress,
+    vaultValid: !!(vaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(vaultAddress)),
+    extApiKey: extApiKey ? extApiKey.slice(0, 8) + '…' : null,
+  });
     try {
       const [hlMain, hlVault, extPos] = await Promise.all([
         fetchHLPositions(mainAddress),
