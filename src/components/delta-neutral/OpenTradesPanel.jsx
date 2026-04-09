@@ -105,7 +105,7 @@ export default function OpenTradesPanel({ hlAddress, hlVaultAddress, extApiKey, 
         ? (isBuy ? (lp ?? pos.entryPx) * 1.005 : (lp ?? pos.entryPx) * 0.995)
         : limitPx;
       const ot = closeOType[key] ?? (mode === 'market' ? 'taker' : 'maker');
-      await placeOrder({ platformId: pos.platform, extKey: pos.coin, isBuy, size: pos.szi, limitPrice: price, orderType: ot, reduceOnly: true });
+      await placeOrder({ platformId: pos.platform, marketId: pos.marketId, isBuy, size: pos.szi, limitPrice: price, orderType: ot, reduceOnly: true });
       setFeedback(f => ({ ...f, [key]: { ok: true, msg: '✅ Ordre envoyé' } }));
       setTimeout(() => load(), 2500);
     } catch (e) {
