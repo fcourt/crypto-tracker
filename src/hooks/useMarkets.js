@@ -14,9 +14,8 @@ const NATIVE_HL_STATIC = [
 ];
 
 const HIP3_STATIC = [
-  { id: 'xau-xyz',  label: 'Or (xyz)',       hlKey: 'xyz:GOLD',   platform: 'hyperliquid', dex: 'xyz', szDecimals: 4, pxDecimals: 1 },
-  { id: 'xag-xyz',  label: 'Argent (xyz)',   hlKey: 'xyz:SILVER', platform: 'hyperliquid', dex: 'xyz', szDecimals: 2, pxDecimals: 3 },
-  { id: 'wti-xyz',  label: 'Pétrole (xyz)',  hlKey: 'xyz:CL',     platform: 'hyperliquid', dex: 'xyz', szDecimals: 2, pxDecimals: 2 },
+  { id: 'GOLD-xyz',   label: 'Or (xyz)',      hlKey: 'xyz:GOLD',   platform: 'hyperliquid', dex: 'xyz', szDecimals: 4, pxDecimals: 1 },
+  { id: 'SILVER-xyz', label: 'Argent (xyz)',  hlKey: 'xyz:SILVER', platform: 'hyperliquid', dex: 'xyz', szDecimals: 2, pxDecimals: 3 },
   // … autres HIP-3
 ];
 
