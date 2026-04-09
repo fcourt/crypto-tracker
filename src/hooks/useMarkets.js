@@ -27,6 +27,12 @@ const EXTENDED_STATIC = [
   // … autres Extended
 ];
 
+const STATIC_FALLBACK = [
+  ...NATIVE_HL_STATIC.map(m => ({ ...m, assetIndex: null })),
+  ...HIP3_STATIC.map(m  => ({ ...m, assetIndex: null })),
+  ...EXTENDED_STATIC,
+];
+
 // ─── Cache module-level (résolution une seule fois par session) ───────────
 
 let _resolvedMarkets = null;
@@ -108,11 +114,11 @@ export async function getMarketByHlKey(hlKey) {
 // ─── Hook React : pour la liste déroulante ───────────────────────────────
 
 export function useMarkets() {
-  const [markets, setMarkets] = useState(_resolvedMarkets ?? []);
+  const [markets, setMarkets] = useState(_resolvedMarkets ?? STATIC_FALLBACK);
   const [loading, setLoading] = useState(!_resolvedMarkets);
 
   useEffect(() => {
-    if (_resolvedMarkets) return; // déjà résolu
+    if (_resolvedMarkets) return;
     buildMarkets().then(m => {
       setMarkets(m);
       setLoading(false);
