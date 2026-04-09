@@ -152,15 +152,24 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
 
   const load = useCallback(async () => {
     setLoading(true);
+    console.log('[OpenPositions] fetch:', { mainAddress, vaultAddress, extApiKey: !!extApiKey });
     try {
       const [hlMain, hlVault, extPos] = await Promise.all([
         fetchHLPositions(mainAddress),
         fetchHLPositions(vaultAddress),
         fetchExtPositions(extApiKey),
       ]);
+      console.log('[OpenPositions] results:', {
+      mainCount:  hlMain.length,
+      vaultCount: hlVault.length,
+      extCount:   extPos.length,
+    });
       const seen   = new Set();
-      const hlUniq = [...hlMain, ...hlVault].filter(p => {
-        const key = p.platform + '-' + p.coin;
+      const hlUniq = [
+        ...hlMain.map(p  => ({ ...p, wallet: 'main'  })),
+        ...hlVault.map(p => ({ ...p, wallet: 'vault' })),
+      ].filter(p => {
+        const key = p.wallet + '-' + p.platform + '-' + p.coin;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
