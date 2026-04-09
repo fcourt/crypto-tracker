@@ -67,7 +67,7 @@ async function buildMarkets() {
       // Index HIP-3 : nativeCount + position dans xyz universe[]
       const hip3IndexMap = {};
       (xyzRes.universe ?? []).forEach((asset, i) => {
-        hip3IndexMap[`xyz:${asset.name}`] = nativeCount + i;
+        hip3IndexMap[asset.name] = nativeCount + i;
       });
 
       console.log('[MARKETS] native count:', nativeCount);
