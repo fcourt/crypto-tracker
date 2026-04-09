@@ -7,9 +7,9 @@ const HL_API = 'https://api.hyperliquid.xyz/info';
 // ─── Définitions statiques (sans assetIndex pour HIP-3) ──────────────────
 
 const NATIVE_HL_STATIC = [
-  { id: 'btc',  label: 'Bitcoin',  hlKey: 'BTC',  platform: 'hyperliquid', szDecimals: 5, pxDecimals: 1 },
-  { id: 'eth',  label: 'Ethereum', hlKey: 'ETH',  platform: 'hyperliquid', szDecimals: 4, pxDecimals: 1 },
-  { id: 'sol',  label: 'Solana',   hlKey: 'SOL',  platform: 'hyperliquid', szDecimals: 2, pxDecimals: 2 },
+  { id: 'BTC', label: 'Bitcoin',  hlKey: 'BTC', platform: 'hyperliquid', szDecimals: 5, pxDecimals: 1 },
+  { id: 'ETH', label: 'Ethereum', hlKey: 'ETH', platform: 'hyperliquid', szDecimals: 4, pxDecimals: 1 },
+  { id: 'SOL', label: 'Solana',   hlKey: 'SOL', platform: 'hyperliquid', szDecimals: 2, pxDecimals: 2 },
   // … autres perps natifs
 ];
 
