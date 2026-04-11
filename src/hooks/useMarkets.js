@@ -1,5 +1,5 @@
 // src/hooks/useMarkets.js
-import { useState, useEffect } from 'react';
+/*import { useState, useEffect } from 'react';
 import { MARKETS } from './useLivePrices';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
