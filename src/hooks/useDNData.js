@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { MARKETS } from './useLivePrices';
+//import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
 async function fetchHLPositions(address) {
@@ -33,7 +33,7 @@ async function fetchHLPositions(address) {
           const platform = coin.startsWith('xyz:')  ? 'xyz'
                          : coin.startsWith('hyna:') ? 'hyena'
                          : 'hyperliquid';
-          const market   = MARKETS.find(m => m.hlKey === coin);
+          const market   = markets.find(m => m.hlKey === coin);
           return {
             platform,
             coin,
@@ -60,7 +60,7 @@ async function fetchExtPositions(apiKey) {
     );
     const data = await res.json();
     return (data?.data || []).map(p => {
-      const market = MARKETS.find(m => m.extKey === p.market);
+      const market = markets.find(m => m.extKey === p.market);
       return {
         platform:      'extended',
         coin:          p.market,
@@ -163,7 +163,7 @@ export function useOrderBook(hlKey) {
   return book;
 }
 
-export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
+export function useOpenPositions(mainAddress, vaultAddress, extApiKey, markets = []) {
   const [positions, setPositions] = useState([]);
   const [loading,   setLoading]   = useState(false);
 
@@ -178,9 +178,9 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
   });
     try {
       const [hlMain, hlVault, extPos] = await Promise.all([
-        fetchHLPositions(mainAddress),
-        fetchHLPositions(vaultAddress),
-        fetchExtPositions(extApiKey),
+        fetchHLPositions(mainAddress, markets),
+        fetchHLPositions(vaultAddress, markets),
+        fetchExtPositions(extApiKey, markets),
       ]);
       console.log('[OpenPositions] results:', {
       mainCount:  hlMain.length,
@@ -200,7 +200,7 @@ export function useOpenPositions(mainAddress, vaultAddress, extApiKey) {
       setPositions([...hlUniq, ...extPos]);
     } catch (e) { console.warn('useOpenPositions error:', e.message); }
     finally { setLoading(false); }
-  }, [mainAddress, vaultAddress, extApiKey]);
+  }, [mainAddress, vaultAddress, extApiKey, markets]);
 
   return { positions, loading, load };
 }
