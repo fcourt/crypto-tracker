@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MARKETS } from './useLivePrices';
+//import { MARKETS } from './useLivePrices';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 
@@ -60,8 +60,8 @@ async function fetchExtFundingRate(extKey, apiKey) {
 }
 
 // Retourne le funding rate pour un marché sur une plateforme donnée
-function getRateFromMap(rates, marketId, platformId) {
-  const market = MARKETS.find(m => m.id === marketId);
+function getRateFromMap(rates, marketId, platformId, markets) {
+  const market = markets.find(m => m.id === marketId);
   if (!market) return null;
 
   if (['hyperliquid', 'xyz', 'hyena'].includes(platformId)) {
@@ -93,7 +93,7 @@ async function fetchExtMarketData(extKey, apiKey) {
   }
 }
 
-export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = '') {
+export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = '', markets = []) {
   const [rates, setRates] = useState({ p1: null, p2: null, extBid: null, extAsk: null });
 
   useEffect(() => {
@@ -101,7 +101,7 @@ export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = 
 
     const refresh = async () => {
       try {
-        const market  = MARKETS.find(m => m.id === marketId);
+        const market  = markets.find(m => m.id === marketId);
         const hlRates = await fetchAllFundingRates();
 
         let extBid = null, extAsk = null;
@@ -110,13 +110,13 @@ export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = 
           ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
               extBid = d.bid; extAsk = d.ask; return d.fundingRate;
             })
-          : getRateFromMap(hlRates, marketId, platform1Id);
+          : getRateFromMap(hlRates, marketId, platform1Id, markets);
 
         const p2 = platform2Id === 'extended'
           ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
               extBid = d.bid; extAsk = d.ask; return d.fundingRate;
             })
-          : getRateFromMap(hlRates, marketId, platform2Id);
+          : getRateFromMap(hlRates, marketId, platform2Id, markets);
 
         setRates({ p1, p2, extBid, extAsk });
       } catch (e) {
@@ -127,7 +127,7 @@ export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = 
     refresh();
     const t = setInterval(refresh, 60000);
     return () => clearInterval(t);
-  }, [marketId, platform1Id, platform2Id, extApiKey]);
+  }, [marketId, platform1Id, platform2Id, extApiKey, markets]);
 
   return rates;
 }
