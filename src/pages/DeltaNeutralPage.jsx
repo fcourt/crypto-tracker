@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 //import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useLivePrices, PLATFORMS } from '../hooks/useLivePrices';
-import { useMarkets } from '../hooks/useMarkets';
+//import { useMarkets } from '../hooks/useMarkets';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
@@ -31,8 +31,8 @@ export default function DeltaNeutralPage() {
   const [placingLeg2,     setPlacingLeg2]     = useState(false);
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
-  const { getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
-  const { markets } = useMarkets();
+  const { markets, getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
+ // const { markets } = useMarkets();
 
   useEffect(() => {
     if (markets.length > 0 && !markets.find(m => m.id === marketId)) {
