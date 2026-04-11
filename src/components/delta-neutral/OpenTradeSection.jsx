@@ -134,7 +134,7 @@ function LegCard({
 }
 
 export default function OpenTradeSection({
-  market, platform1, platform2, plat1, plat2, price1, price2,
+  markets, platform1, platform2, plat1, plat2, price1, price2,
   sizeUSD, setSizeUSD, side1, side2, calc, fees,
   useStepSize, setUseStepSize, getStepSize, marketId, setMarketId,
   setPlatform1, setPlatform2, fundingP1, fundingP2, suggestion, book, extBid, extAsk,
@@ -146,7 +146,7 @@ export default function OpenTradeSection({
 }) {
 
   const { filteredMarkets, loading, errors, isIntersection, counts } =
-    useMarketFilter(platform1, platform2);
+    useMarketFilter(platform1, platform2, markets);
 
   // Auto-reset si le marché actuel disparaît de la liste filtrée
   useEffect(() => {
