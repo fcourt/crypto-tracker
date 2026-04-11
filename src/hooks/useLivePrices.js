@@ -51,6 +51,7 @@ export const PLATFORMS = [
   { id: 'xyz',         label: 'trade.xyz',   source: 'hl' },
   { id: 'hyena',       label: 'HyENA',       source: 'hl' },
   { id: 'extended',    label: 'Extended',    source: 'ext' },
+  { id: 'nado',        label: 'Nado',        source: 'nado' },
 ];
 
 const XYZ_OFFSET = 110000;  // ← remplace 100000
