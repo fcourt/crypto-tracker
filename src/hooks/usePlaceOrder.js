@@ -5,7 +5,7 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
-import { getMarkets } from './useMarkets';
+//import { getMarkets } from './useMarkets';
 import { roundToHLPrice } from '../utils/dnHelpers';
 
 
@@ -224,7 +224,7 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 }
 
 // ─── Hook principal ───────────────────────────────────────────────────────
-export function usePlaceOrder() {
+export function usePlaceOrder(markets = []) {
 
   const placeOrder = async (params) => {
     const starkPrivateKey = localStorage.getItem('ext_stark_pk') || '';
@@ -239,8 +239,9 @@ export function usePlaceOrder() {
     const { platformId, isBuy, size, limitPrice } = params;
 
     // ─── Résolution du marché (assetIndex réel via meta HL) ──────────────
-    const allMarkets = await getMarkets();
-    const market     = allMarkets.find(m => m.id === params.marketId);
+    // const allMarkets = await getMarkets();
+    //const market     = allMarkets.find(m => m.id === params.marketId);
+    const market = markets.find(m => m.id === params.marketId);
     if (!market) throw new Error(`Marché inconnu : ${params.marketId}`);
 
     const { assetIndex, szDecimals, pxDecimals, extKey } = market;
