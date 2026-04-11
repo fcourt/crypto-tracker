@@ -72,7 +72,7 @@ export default function DeltaNeutralPage() {
   };
 
   // ── Funding & prix ─────────────────────────────────────────────────────────
-  const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey);
+  const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey, markets);
 
   //const market = MARKETS.find(m => m.id === marketId);
   const market = markets.find(m => m.id === marketId);
