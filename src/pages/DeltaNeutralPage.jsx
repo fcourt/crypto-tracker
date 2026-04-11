@@ -56,7 +56,7 @@ export default function DeltaNeutralPage() {
   const saveExtKey         = (key) => { setExtApiKey(key); localStorage.setItem('ext_api_key', key); saveExtendedApiKey(key, 'Delta Neutral'); };
 
   // ── Hooks trading ──────────────────────────────────────────────────────────
-  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder();
+  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder(markets);
 
   // ── Marges ─────────────────────────────────────────────────────────────────
   //const hlMarginAddress = hlEffectiveAddress;
