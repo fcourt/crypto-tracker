@@ -1,6 +1,6 @@
 // src/hooks/useMarketFilter.js
 import { useState, useEffect } from 'react';
-import { MARKETS } from './useLivePrices';
+//import { MARKETS } from './useLivePrices';
 import { fetchHLAvailableKeys, fetchXyzAvailableKeys, fetchHyenaAvailableKeys } from '../services/markets/adapters/hyperliquid';
 import { fetchExtAvailableKeys }  from '../services/markets/adapters/extended';
 import { fetchNadoAvailableKeys } from '../services/markets/adapters/nado';
@@ -84,7 +84,7 @@ export function useMarketFilter(platform1, platform2, markets = []) {
     counts: Object.fromEntries(
       platforms.map(pid => [
         pid,
-        MARKETS.filter(m => checkAvailable(m, pid, availabilityMap[pid])).length,
+        markets.filter(m => checkAvailable(m, pid, availabilityMap[pid])).length,
       ])
     ),
   };
