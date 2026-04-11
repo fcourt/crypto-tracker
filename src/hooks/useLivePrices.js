@@ -59,6 +59,7 @@ async function fetchHLMids() {
   const [nativeMeta, nativeCtxs] = Array.isArray(nativeData) ? nativeData : [null, null];
   (nativeMeta?.universe || []).forEach((asset, index) => {
     const market = buildMarketFromHLKey(asset.name);
+    market.assetIndex = index; 
     discoveredMarkets.set(market.id, market);
     if (nativeCtxs?.[index]?.markPx) {
       prices[asset.name]    = nativeCtxs[index].markPx;
@@ -74,7 +75,9 @@ async function fetchHLMids() {
   const [xyzMeta, xyzCtxs] = Array.isArray(xyzData) ? xyzData : [null, null];
   (xyzMeta?.universe || []).forEach((asset, index) => {
     const market = buildMarketFromHLKey(asset.name);
-    if (!discoveredMarkets.has(market.id)) discoveredMarkets.set(market.id, market);
+    if (!discoveredMarkets.has(market.id)) 
+      market.assetIndex = XYZ_OFFSET + index;
+      discoveredMarkets.set(market.id, market);
     if (xyzCtxs?.[index]?.markPx) {
       prices[asset.name]    = xyzCtxs[index].markPx;
       stepSizes[asset.name] = Math.pow(10, -(asset.szDecimals ?? 2));
