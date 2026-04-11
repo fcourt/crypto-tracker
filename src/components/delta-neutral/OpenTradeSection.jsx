@@ -1,6 +1,8 @@
-import { PLATFORMS, MARKETS } from '../../hooks/useLivePrices';
 import { fmt, fmtUSD, fmtPct } from '../../utils/dnHelpers';
 import DropSection from './DropSection';
+import { useEffect } from 'react';
+import { PLATFORMS }         from '../../hooks/useLivePrices';
+import { useMarketFilter }   from '../../hooks/useMarketFilter';
 
 function LegCard({
   side, platform, price, limitPrice, leverage, sizeUSD, sizeAsset, marginAvailable,
@@ -142,46 +144,105 @@ export default function OpenTradeSection({
   handlePlaceLeg, handlePlaceBothLegs,
   loadedPosition1, loadedPosition2, setLoadedPosition1, setLoadedPosition2,
 }) {
+
+  const { filteredMarkets, loading, errors, isIntersection, counts } =
+    useMarketFilter(platform1, platform2);
+
+  // Auto-reset si le marché actuel disparaît de la liste filtrée
+  useEffect(() => {
+    if (!loading && filteredMarkets.length > 0) {
+      if (!filteredMarkets.find(m => m.id === marketId)) {
+        setMarketId(filteredMarkets[0].id);
+      }
+    }
+  }, [filteredMarkets, loading, marketId, setMarketId]);
+  
   return (
     <DropSection title="📈 Ouvrir un trade Delta Neutral" defaultOpen={true}>
       <div className="px-4 py-4 flex flex-col gap-4">
 
         {/* Sélecteurs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Marché</label>
-            <select value={marketId} onChange={e => setMarketId(e.target.value)}
-              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-              {['Crypto','Indices','Commodités','Equities'].map(cat => (
-                <optgroup key={cat} label={cat}>
-                  {MARKETS.filter(m => m.category === cat).map(m =>
-                    <option key={m.id} value={m.id}>{m.label}</option>
-                  )}
-                </optgroup>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Plateforme 1</label>
-            <select value={platform1} onChange={e => setPlatform1(e.target.value)}
-              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-              {PLATFORMS.filter(p => p.id !== platform2).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Plateforme 2</label>
-            <select value={platform2} onChange={e => setPlatform2(e.target.value)}
-              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500">
-              {PLATFORMS.filter(p => p.id !== platform1).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Taille (USD notionnel)</label>
-            <input type="number" value={sizeUSD} onChange={e => setSizeUSD(e.target.value)} placeholder="ex: 1000"
-              className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
-          </div>
-        </div>
+<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
 
+  {/* Plateforme 1 */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs text-gray-500">Plateforme 1</label>
+    <select
+      value={platform1}
+      onChange={e => setPlatform1(e.target.value)}
+      className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+    >
+      {PLATFORMS.filter(p => p.id !== platform2).map(p => (
+        <option key={p.id} value={p.id}>{p.label}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* Plateforme 2 */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs text-gray-500">Plateforme 2</label>
+    <select
+      value={platform2}
+      onChange={e => setPlatform2(e.target.value)}
+      className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+    >
+      {PLATFORMS.filter(p => p.id !== platform1).map(p => (
+        <option key={p.id} value={p.id}>{p.label}</option>
+      ))}
+    </select>
+  </div>
+
+  {/* Marché */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs text-gray-500 flex items-center gap-2">
+      Marché
+      {loading && (
+        <span className="text-gray-600 animate-pulse text-xs">chargement…</span>
+      )}
+      {!loading && isIntersection && (
+        <span className="text-blue-400 text-xs">
+          {filteredMarkets.length} communs ({counts[platform1]} ∩ {counts[platform2]})
+        </span>
+      )}
+      {Object.keys(errors).length > 0 && (
+        <span className="text-orange-400 text-xs" title={JSON.stringify(errors)}>
+          ⚠️ {Object.keys(errors).join(', ')} indisponible
+        </span>
+      )}
+    </label>
+    <select
+      value={marketId}
+      onChange={e => setMarketId(e.target.value)}
+      disabled={loading && filteredMarkets.length === 0}
+      className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+    >
+      {['Crypto', 'Indices', 'Commodités', 'Equities'].map(cat => {
+        const catMarkets = filteredMarkets.filter(m => m.category === cat);
+        if (catMarkets.length === 0) return null;
+        return (
+          <optgroup key={cat} label={`${cat} (${catMarkets.length})`}>
+            {catMarkets.map(m => (
+              <option key={m.id} value={m.id}>{m.label}</option>
+            ))}
+          </optgroup>
+        );
+      })}
+    </select>
+  </div>
+
+  {/* Taille */}
+  <div className="flex flex-col gap-1">
+    <label className="text-xs text-gray-500">Taille (USD notionnel)</label>
+    <input
+      type="number"
+      value={sizeUSD}
+      onChange={e => setSizeUSD(e.target.value)}
+      placeholder="ex: 1000"
+      className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+    />
+  </div>
+
+</div>
         {/* Direction optimale + toggle step size */}
         {(suggestion || fundingP1 != null || fundingP2 != null) && (
           <div className="rounded-lg px-3 py-2 bg-blue-900/20 border border-blue-700 text-xs flex items-center justify-between gap-4 flex-wrap">
