@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 //import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
 
-async function fetchHLPositions(address) {
+async function fetchHLPositions(address, markets = []) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
     // ─── Call natif HL + call HIP-3 xyz en parallèle ─────────────────
@@ -51,7 +51,7 @@ async function fetchHLPositions(address) {
   } catch (e) { console.warn('fetchHLPositions error:', e.message); return []; }
 }
 
-async function fetchExtPositions(apiKey) {
+async function fetchExtPositions(apiKey, markets = []) {
   if (!apiKey?.trim()) return [];
   try {
     const res  = await fetch(
