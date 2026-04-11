@@ -32,7 +32,7 @@ function checkAvailable(market, platformId, keys) {
   }
 }
 
-export function useMarketFilter(platform1, platform2) {
+export function useMarketFilter(platform1, platform2, markets = []) {
   // availabilityMap : { hyperliquid: Set, extended: Set, nado: Set, ... }
   const [availabilityMap, setAvailabilityMap] = useState({});
   const [loading, setLoading] = useState(false);
@@ -70,7 +70,7 @@ export function useMarketFilter(platform1, platform2) {
   }, [cacheKey]);
 
   // Filtre : le marché doit être dispo sur TOUTES les plateformes sélectionnées
-  const filteredMarkets = MARKETS.filter(m =>
+  const filteredMarkets = markets.filter(m =>
     platforms.every(pid => checkAvailable(m, pid, availabilityMap[pid]))
   );
 
