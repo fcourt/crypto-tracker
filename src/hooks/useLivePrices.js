@@ -3,6 +3,9 @@ import {
   HL_KEY_OVERRIDES, MARKET_LABELS, inferCategory,
   EXT_KEY_OVERRIDES, EMPTY_MARKET, NADO_KEY_OVERRIDES, NADO_ONLY_MARKETS,
 } from '../config/marketsConfig';
+
+import { fetchHLMids }     from '../services/markets/adapters/hyperliquid';
+import { fetchExtMids }    from '../services/markets/adapters/extended';
 import { fetchNadoPrices } from '../services/markets/adapters/nado';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
@@ -11,6 +14,7 @@ const XYZ_OFFSET = 110000;
 // ─── Builders ─────────────────────────────────────────────────────────────────
 
 /** Construit un objet Market depuis une clé HL (native ou xyz:) */
+/*
 function buildMarketFromHLKey(hlKey) {
   const override = HL_KEY_OVERRIDES[hlKey] || {};
   const id       = override.id || hlKey.replace(/^xyz:/, '');
@@ -40,7 +44,7 @@ function buildMarketFromHLKey(hlKey) {
     nadoKey,
   };
 }
-
+*/
 // ─── Fetch HL ─────────────────────────────────────────────────────────────────
 /*
 async function fetchHLMids() {
