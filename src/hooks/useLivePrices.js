@@ -131,47 +131,49 @@ export const PLATFORMS = [
 ];
 
 export function useLivePrices(intervalMs = 3000) {
-  const [markets,       setMarkets]       = useState([]);   // ← dynamique maintenant
+  const [markets,       setMarkets]       = useState([]);
   const [hlMids,        setHlMids]        = useState({});
   const [hlSteps,       setHlSteps]       = useState({});
   const [hlAssetMeta,   setHlAssetMeta]   = useState({});
   const [extMids,       setExtMids]       = useState({});
   const [extPrecisions, setExtPrecisions] = useState({});
+  const [nadoMids,      setNadoMids]      = useState({});
   const [lastUpdate,    setLastUpdate]    = useState(null);
-  const [nadoMids, setNadoMids]           = useState({});
   const timer = useRef(null);
 
-  // fetchAll()
-  const [hlResult, extResult, nadoMidsRaw] = await Promise.all([
-    fetchHLMids(),
-    fetchExtMids(),
-    fetchNadoPrices().catch(() => ({})),
-  ]);
+  // ✅ fetchAll correctement enveloppé dans useCallback
+  const fetchAll = useCallback(async () => {
+    try {
+      const [hlResult, extResult, nadoMidsRaw] = await Promise.all([
+        fetchHLMids(),
+        fetchExtMids(),
+        fetchNadoPrices().catch(() => ({})),
+      ]);
 
-    // Fusionner HL discoveredMarkets + NADO_ONLY_MARKETS
-    const allMarkets = [
-      EMPTY_MARKET,
-      ...hlResult.discoveredMarkets.values(),
-      ...NADO_ONLY_MARKETS.filter(m => !hlResult.discoveredMarkets.has(m.id)),
-    ];
+      const allMarkets = [
+        EMPTY_MARKET,
+        ...hlResult.discoveredMarkets.values(),
+        ...NADO_ONLY_MARKETS.filter(m => !hlResult.discoveredMarkets.has(m.id)),
+      ];
 
-    setMarkets(allMarkets);
-    setHlMids(hlResult.prices     || {});
-    setHlSteps(hlResult.stepSizes || {});
-    setHlAssetMeta(hlResult.assetMeta || {});
-    setExtMids(extResult.priceMap      || {});
-    setExtPrecisions(extResult.precisionMap || {});
-    setNadoMids(nadoMidsRaw); 
-    setLastUpdate(new Date());
-  }, []);
+      setMarkets(allMarkets);
+      setHlMids(hlResult.prices         || {});
+      setHlSteps(hlResult.stepSizes     || {});
+      setHlAssetMeta(hlResult.assetMeta || {});
+      setExtMids(extResult.priceMap         || {});
+      setExtPrecisions(extResult.precisionMap || {});
+      setNadoMids(nadoMidsRaw);
+      setLastUpdate(new Date());
+    } catch (e) {
+      console.warn('fetchAll error:', e.message);
+    }
+  }, []); // ← fermeture correcte du useCallback
 
   useEffect(() => {
     fetchAll();
     timer.current = setInterval(fetchAll, intervalMs);
     return () => clearInterval(timer.current);
   }, [fetchAll]);
-
-  // ─── Getters (signature inchangée) ──────────────────────────────────────────
 
   const getAssetMeta = useCallback((hlKey) => {
     if (!hlKey) return null;
@@ -186,14 +188,12 @@ export function useLivePrices(intervalMs = 3000) {
     const market   = markets.find(m => m.id === marketId);
     const platform = PLATFORMS.find(p => p.id === platformId);
     if (!market || !platform) return null;
-
     if (platform.source === 'hl')
-      return market.hlKey ? parseFloat(hlMids[market.hlKey]) || null : null;
+      return market.hlKey   ? parseFloat(hlMids[market.hlKey])   || null : null;
     if (platform.source === 'ext')
-      return market.extKey ? parseFloat(extMids[market.extKey]) || null : null;
+      return market.extKey  ? parseFloat(extMids[market.extKey]) || null : null;
     if (platform.source === 'nado')
-      return market.nadoKey ? nadoMids[market.nadoKey] ?? null : null;
-
+      return market.nadoKey ? nadoMids[market.nadoKey] ?? null           : null;
     return null;
   }, [markets, hlMids, extMids, nadoMids]);
 
@@ -203,6 +203,5 @@ export function useLivePrices(intervalMs = 3000) {
     return hlSteps[market.hlKey] ?? 0.01;
   }, [markets, hlSteps]);
 
-  // MARKETS exporté comme état dynamique (compatibilité avec le reste du code)
   return { markets, getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, nadoMids, lastUpdate };
 }
