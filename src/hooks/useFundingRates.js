@@ -93,6 +93,52 @@ async function fetchExtMarketData(extKey, apiKey) {
   }
 }
 
+const NADO_ARCHIVE = 'https://archive.prod.nado.xyz';
+
+async function fetchNadoFundingRates() {
+  try {
+    const [symbolsRes, productsRes] = await Promise.all([
+      fetch(`${NADO_ARCHIVE}/v2/symbols`),
+      fetch(`${NADO_ARCHIVE}/v1/query`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'all_products' }),
+      }),
+    ]);
+    if (!symbolsRes.ok || !productsRes.ok) return {};
+
+    const [symbolsRaw, productsRaw] = await Promise.all([
+      symbolsRes.json(),
+      productsRes.json(),
+    ]);
+
+    // product_id → nadoKey
+    const idToKey = {};
+    Object.values(symbolsRaw).forEach(s => {
+      if (s.product_id != null)
+        idToKey[s.product_id] = s.symbol.replace(/-PERP$/, '').replace(/-SPOT$/, '');
+    });
+
+    const rates = {};
+    const SCALE = 1e18;
+
+    // Funding rate uniquement sur les perp_products
+    (productsRaw?.data?.perp_products || []).forEach(p => {
+      if (!p.product_id) return;
+      const key  = idToKey[p.product_id];
+      if (!key) return;
+      // Champ funding_rate_x18 ou dans state selon la version API
+      const raw  = p.state?.funding_rate_x18 ?? p.funding_rate_x18 ?? null;
+      if (raw != null) rates[key] = Number(BigInt(raw)) / SCALE;
+    });
+
+    return rates; // { 'BTC': 0.0001, 'ETH': 0.00008, ... }
+  } catch (e) {
+    console.warn('fetchNadoFundingRates error:', e.message);
+    return {};
+  }
+}
+
 export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = '', markets = []) {
   const [rates, setRates] = useState({ p1: null, p2: null, extBid: null, extAsk: null });
 
