@@ -16,12 +16,14 @@ function buildMarketFromHLKey(hlKey) {
   const isXyz    = hlKey.startsWith('xyz:');
 
   // extKey : dérivé automatiquement selon le type
-  let extKey = EXT_KEY_OVERRIDES[id] ?? null;
-  if (extKey === undefined) { // pas dans overrides
-    if (!isXyz) extKey = `${id}-USD`;             // crypto natif : BTC-USD
-    else         extKey = `${id}_24_5-USD`;        // equity xyz : TSLA_24_5-USD
+  let extKey;
+  if (id in EXT_KEY_OVERRIDES) {
+    extKey = EXT_KEY_OVERRIDES[id];   // string ou null (= non dispo sur Extended)
+  } else if (!isXyz) {
+    extKey = `${id}-USD`;             // crypto natif : BTC-USD, ETH-USD, SOL-USD
+  } else {
+    extKey = `${id}_24_5-USD`;        // equity xyz : TSLA_24_5-USD, AAPL_24_5-USD
   }
-
   // nadoKey
   const nadoKey = NADO_KEY_OVERRIDES[id] ?? (
     ['BTC','ETH','SOL','TSLA','AAPL','NVDA','MSFT','AMZN','GOOGL','META'].includes(id)
