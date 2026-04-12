@@ -1,4 +1,16 @@
 // src/config/marketsConfig.js
+
+export const EMPTY_MARKET = {
+  id:           '',
+  label:        '— Sélectionner un marché —',
+  category:     null,
+  hlKey:        null,
+  extKey:       null,
+  nadoKey:      null,
+  assetIndex:   null,
+  nadoProductId: null,
+};
+
 // ─── Overrides nécessaires uniquement quand l'id ≠ strip("xyz:", hlKey) ──────
 // Seulement 5 cas sur 37 !
 export const HL_KEY_OVERRIDES = {
