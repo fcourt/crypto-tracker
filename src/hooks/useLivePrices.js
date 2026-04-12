@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   HL_KEY_OVERRIDES, MARKET_LABELS, inferCategory,
-  EXT_KEY_OVERRIDES, NADO_KEY_OVERRIDES, NADO_ONLY_MARKETS,
+  EXT_KEY_OVERRIDES, EMPTY_MARKET, NADO_KEY_OVERRIDES, NADO_ONLY_MARKETS,
 } from '../config/marketsConfig';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
@@ -137,6 +137,7 @@ export function useLivePrices(intervalMs = 3000) {
 
     // Fusionner HL discoveredMarkets + NADO_ONLY_MARKETS
     const allMarkets = [
+      EMPTY_MARKET,
       ...hlResult.discoveredMarkets.values(),
       ...NADO_ONLY_MARKETS.filter(m => !hlResult.discoveredMarkets.has(m.id)),
     ];
