@@ -42,7 +42,7 @@ function buildMarketFromHLKey(hlKey) {
 }
 
 // ─── Fetch HL ─────────────────────────────────────────────────────────────────
-
+/*
 async function fetchHLMids() {
   const [resNative, resXyz] = await Promise.all([
     fetch(HL_API, { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -114,7 +114,7 @@ async function fetchExtMids() {
   });
   return { priceMap, precisionMap };
 }
-
+*/
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export const PLATFORMS = [
