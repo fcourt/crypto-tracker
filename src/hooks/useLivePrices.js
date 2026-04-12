@@ -204,5 +204,5 @@ export function useLivePrices(intervalMs = 3000) {
   }, [markets, hlSteps]);
 
   // MARKETS exporté comme état dynamique (compatibilité avec le reste du code)
-  return { markets, getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, lastUpdate };
+  return { markets, getPrice, getStepSize, getAssetMeta, getExtPrecision, hlMids, extMids, nadoMids, lastUpdate };
 }
