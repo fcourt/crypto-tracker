@@ -150,12 +150,12 @@ export default function OpenTradeSection({
 
   // Auto-reset si le marché actuel disparaît de la liste filtrée
   useEffect(() => {
-    if (!loading && filteredMarkets.length > 0) {
-      if (!filteredMarkets.find(m => m.id === marketId)) {
-        setMarketId(filteredMarkets[0].id);
-      }
+  if (!loading && filteredMarkets.length > 0 && marketId !== '') {
+    if (!filteredMarkets.find(m => m.id === marketId)) {
+      setMarketId('');   // ← reset vers vide plutôt que forcer le premier
     }
-  }, [filteredMarkets, loading, marketId, setMarketId]);
+  }
+}, [filteredMarkets, loading, marketId, setMarketId]);
   
   return (
     <DropSection title="📈 Ouvrir un trade Delta Neutral" defaultOpen={true}>
@@ -216,6 +216,9 @@ export default function OpenTradeSection({
       disabled={loading && filteredMarkets.length === 0}
       className="bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
     >
+      {/* Option vide toujours visible */}
+      <option value="">— Sélectionner —</option>
+      
       {['Crypto', 'Indices', 'Commodités', 'Equities'].map(cat => {
         const catMarkets = filteredMarkets.filter(m => m.category === cat);
         if (catMarkets.length === 0) return null;
