@@ -41,7 +41,7 @@ async function fetchAllFundingRates() {
 
   return rates;
 }
-
+/*
 async function fetchExtFundingRate(extKey, apiKey) {
   if (!extKey || !apiKey) return null;
   try {
@@ -58,7 +58,7 @@ async function fetchExtFundingRate(extKey, apiKey) {
     return null;
   }
 }
-
+*/
 // Retourne le funding rate pour un marché sur une plateforme donnée
 function getRateFromMap(rates, marketId, platformId, markets) {
   const market = markets.find(m => m.id === marketId);
@@ -146,30 +146,42 @@ export function useFundingRates(marketId, platform1Id, platform2Id, extApiKey = 
     if (!marketId || !platform1Id || !platform2Id) return;
 
     const refresh = async () => {
-      try {
-        const market  = markets.find(m => m.id === marketId);
-        const hlRates = await fetchAllFundingRates();
+  try {
+    const market = markets.find(m => m.id === marketId);
 
-        let extBid = null, extAsk = null;
+    // Fetch toutes les sources en parallèle
+    const needsNado = platform1Id === 'nado' || platform2Id === 'nado';
+    const [hlRates, nadoRates] = await Promise.all([
+      fetchAllFundingRates(),
+      needsNado ? fetchNadoFundingRates() : Promise.resolve({}),
+    ]);
 
-        const p1 = platform1Id === 'extended'
-          ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
-              extBid = d.bid; extAsk = d.ask; return d.fundingRate;
-            })
-          : getRateFromMap(hlRates, marketId, platform1Id, markets);
+    let extBid = null, extAsk = null;
 
-        const p2 = platform2Id === 'extended'
-          ? await fetchExtMarketData(market?.extKey, extApiKey).then(d => {
-              extBid = d.bid; extAsk = d.ask; return d.fundingRate;
-            })
-          : getRateFromMap(hlRates, marketId, platform2Id, markets);
-
-        setRates({ p1, p2, extBid, extAsk });
-      } catch (e) {
-        console.warn('useFundingRates error:', e.message);
+    const resolveRate = async (platformId) => {
+      if (platformId === 'extended') {
+        return fetchExtMarketData(market?.extKey, extApiKey).then(d => {
+          extBid = d.bid; extAsk = d.ask; return d.fundingRate;
+        });
       }
+      if (platformId === 'nado') {
+        const key = market?.nadoKey;
+        return key ? (nadoRates[key] ?? null) : null;
+      }
+      // HL natif / xyz / hyena
+      return getRateFromMap(hlRates, marketId, platformId, markets);
     };
 
+    const [p1, p2] = await Promise.all([
+      resolveRate(platform1Id),
+      resolveRate(platform2Id),
+    ]);
+
+    setRates({ p1, p2, extBid, extAsk });
+  } catch (e) {
+    console.warn('useFundingRates error:', e.message);
+  }
+};
     refresh();
     const t = setInterval(refresh, 60000);
     return () => clearInterval(t);
