@@ -38,7 +38,8 @@ export function useMarketFilter(platform1, platform2, markets = []) {
   const [loading, setLoading] = useState(false);
   const [errors,  setErrors]  = useState({});
 
-  const platforms = [...new Set([platform1, platform2].filter(Boolean))];
+  //const platforms = [...new Set([platform1, platform2].filter(Boolean))];
+  const platforms = [...new Set([platform1, platform2].filter(p => p !== '' && p != null))];
   const cacheKey  = platforms.slice().sort().join(',');
 
   useEffect(() => {
