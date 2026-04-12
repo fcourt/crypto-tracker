@@ -117,6 +117,7 @@ async function fetchExtMids() {
 // ─── Hook principal ───────────────────────────────────────────────────────────
 
 export const PLATFORMS = [
+  { id: '',            label: '— Aucune —'     }, 
   { id: 'hyperliquid', label: 'Hyperliquid', source: 'hl'   },
   { id: 'xyz',         label: 'trade.xyz',   source: 'hl'   },
   { id: 'hyena',       label: 'HyENA',       source: 'hl'   },
