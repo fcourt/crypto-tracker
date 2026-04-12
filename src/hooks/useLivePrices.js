@@ -3,6 +3,7 @@ import {
   HL_KEY_OVERRIDES, MARKET_LABELS, inferCategory,
   EXT_KEY_OVERRIDES, EMPTY_MARKET, NADO_KEY_OVERRIDES, NADO_ONLY_MARKETS,
 } from '../config/marketsConfig';
+import { fetchNadoPrices } from '../services/markets/adapters/nado';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 const XYZ_OFFSET = 110000;
@@ -133,10 +134,15 @@ export function useLivePrices(intervalMs = 3000) {
   const [extMids,       setExtMids]       = useState({});
   const [extPrecisions, setExtPrecisions] = useState({});
   const [lastUpdate,    setLastUpdate]    = useState(null);
+  const [nadoMids, setNadoMids]           = useState({});
   const timer = useRef(null);
 
-  const fetchAll = useCallback(async () => {
-    const [hlResult, extResult] = await Promise.all([fetchHLMids(), fetchExtMids()]);
+  // fetchAll()
+  const [hlResult, extResult, nadoMidsRaw] = await Promise.all([
+    fetchHLMids(),
+    fetchExtMids(),
+    fetchNadoPrices().catch(() => ({})),
+  ]);
 
     // Fusionner HL discoveredMarkets + NADO_ONLY_MARKETS
     const allMarkets = [
@@ -151,6 +157,7 @@ export function useLivePrices(intervalMs = 3000) {
     setHlAssetMeta(hlResult.assetMeta || {});
     setExtMids(extResult.priceMap      || {});
     setExtPrecisions(extResult.precisionMap || {});
+    setNadoMids(nadoMidsRaw); 
     setLastUpdate(new Date());
   }, []);
 
@@ -181,10 +188,10 @@ export function useLivePrices(intervalMs = 3000) {
     if (platform.source === 'ext')
       return market.extKey ? parseFloat(extMids[market.extKey]) || null : null;
     if (platform.source === 'nado')
-      return null; // TODO: brancher le feed de prix Nado
+      return market.nadoKey ? nadoMids[market.nadoKey] ?? null : null;
 
     return null;
-  }, [markets, hlMids, extMids]);
+  }, [markets, hlMids, extMids, nadoMids]);
 
   const getStepSize = useCallback((marketId) => {
     const market = markets.find(m => m.id === marketId);
