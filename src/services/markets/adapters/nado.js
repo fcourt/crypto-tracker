@@ -47,6 +47,11 @@ export async function fetchNadoPrices() {
     productsRes.json(),
   ]);
 
+  // ← AJOUTER CES LOGS
+  console.log('[Nado] symbols sample:', Object.values(symbolsRaw).slice(0, 3));
+  console.log('[Nado] perp_products sample:', productsRaw?.data?.perp_products?.slice(0, 3));
+  console.log('[Nado] spot_products sample:', productsRaw?.data?.spot_products?.slice(0, 3));
+
   // product_id → nadoKey depuis /v2/symbols
   const idToKey = {};
   Object.values(symbolsRaw).forEach(s => {
