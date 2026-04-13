@@ -143,12 +143,19 @@ export function useLivePrices(intervalMs = 3000) {
 
   // ✅ fetchAll correctement enveloppé dans useCallback
   const fetchAll = useCallback(async () => {
+    console.log('[fetchAll] début'); // ← AJOUTER ICI
     try {
+      console.log('[fetchAll] avant Promise.all'); // ← ET ICI
       const [hlResult, extResult, nadoMidsRaw] = await Promise.all([
         fetchHLMids(),
         fetchExtMids(),
-        fetchNadoPrices().catch(() => ({})),
+        fetchNadoPrices().catch((e) => {
+        console.warn('[fetchAll] fetchNadoPrices échoué:', e.message); // ← ET ICI
+          return {};
+      }),
       ]);
+
+      console.log('[fetchAll] nadoMidsRaw:', nadoMidsRaw); // ← ET ICI
 
       const allMarkets = [
         EMPTY_MARKET,
@@ -170,6 +177,7 @@ export function useLivePrices(intervalMs = 3000) {
   }, []); // ← fermeture correcte du useCallback
 
   useEffect(() => {
+    console.log('[useEffect] mount'); // ← ajouter
     fetchAll();
     timer.current = setInterval(fetchAll, intervalMs);
     return () => clearInterval(timer.current);
