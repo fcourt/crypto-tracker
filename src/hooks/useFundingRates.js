@@ -141,55 +141,40 @@ async function fetchNadoFundingRates() {
 }
 */
 
-const NADO_GATEWAY = 'https://gateway.prod.nado.xyz';
-const NADO_ARCHIVE = 'https://archive.prod.nado.xyz';
-
-async function fetchNadoFundingRates() {
+async function fetchNadoFundingRates(idToKey, productIds) {
   try {
-    const symbolsRes = await fetch(`${NADO_ARCHIVE}/v2/symbols`);
-    if (!symbolsRes.ok) return {};
-    const symbolsRaw = await symbolsRes.json();
-
-    const idToKey    = {};
-    const productIds = [];
-    Object.values(symbolsRaw).forEach(s => {
-      const pid = s.product_id ?? null;
-      if (pid != null && pid !== 0) {
-        idToKey[pid] = s.symbol.replace(/-PERP$/, '').replace(/-SPOT$/, '');
-        productIds.push(pid);
-      }
-    });
-
-    // ✅ GATEWAY + product_ids obligatoires
-    const fundingRes = await fetch(`${NADO_GATEWAY}/v1/query`, {
+    const res = await fetch('https://archive.prod.nado.xyz/v1', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        type:        'funding_rates',  // à valider — voir note ci-dessous
-        product_ids: productIds,
+      body: JSON.stringify({
+        funding_rates: {          // ← wrapper obligatoire
+          product_ids: productIds,
+        },
       }),
     });
 
-    if (!fundingRes.ok) {
-      console.warn('[Nado funding] status:', fundingRes.status);
+    if (!res.ok) {
+      console.warn('[Nado funding] status:', res.status);
       return {};
     }
 
-    const fundingRaw = await fundingRes.json();
-    console.log('[Nado funding] réponse:', JSON.stringify(fundingRaw).slice(0, 300));
+    const raw = await res.json();
+    // raw = { "2": { product_id, funding_rate_x18, update_time }, "4": {...}, ... }
 
-    const rates = {};
     const SCALE = 1e18;
-    (fundingRaw?.data?.funding_rates || fundingRaw?.data || []).forEach(p => {
+    const rates = {};
+
+    Object.values(raw).forEach(p => {
       const key = idToKey[p.product_id];
       if (!key) return;
-      const raw = p.funding_rate_x18 ?? p.rate_x18 ?? null;
-      if (raw != null) rates[key] = parseFloat(raw) / SCALE;
+      rates[key] = parseFloat(p.funding_rate_x18) / SCALE;
     });
 
+    console.log('[Nado funding] rates extraits:', rates);
     return rates;
+
   } catch (e) {
-    console.warn('fetchNadoFundingRates error:', e.message);
+    console.warn('[Nado funding] error:', e.message);
     return {};
   }
 }
