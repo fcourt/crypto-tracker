@@ -141,36 +141,57 @@ async function fetchNadoFundingRates() {
 }
 */
 
-async function fetchNadoFundingRates(idToKey, productIds) {
+const NADO_ARCHIVE = 'https://archive.prod.nado.xyz';
+
+// Cache pour éviter de re-fetcher /v2/symbols à chaque refresh (60s)
+let _nadoIdToKey = null;
+let _nadoProductIds = null;
+
+async function getNadoSymbols() {
+  if (_nadoIdToKey && _nadoProductIds) return { idToKey: _nadoIdToKey, productIds: _nadoProductIds };
+
+  const res = await fetch(`${NADO_ARCHIVE}/v2/symbols`);
+  if (!res.ok) return { idToKey: {}, productIds: [] };
+
+  const raw = await res.json();
+  const idToKey = {};
+  const productIds = [];
+
+  Object.values(raw).forEach(s => {
+    const pid = s.product_id ?? null;
+    if (pid != null && pid !== 0) {
+      idToKey[pid] = s.symbol.replace(/-PERP$/, '').replace(/-SPOT$/, '');
+      productIds.push(pid);
+    }
+  });
+
+  _nadoIdToKey = idToKey;
+  _nadoProductIds = productIds;
+  return { idToKey, productIds };
+}
+
+async function fetchNadoFundingRates() {
   try {
-    const res = await fetch('https://archive.prod.nado.xyz/v1', {
+    const { idToKey, productIds } = await getNadoSymbols();
+    if (!productIds.length) return {};
+
+    const res = await fetch(`${NADO_ARCHIVE}/v1`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        funding_rates: {          // ← wrapper obligatoire
-          product_ids: productIds,
-        },
+        funding_rates: { product_ids: productIds },
       }),
     });
 
-    if (!res.ok) {
-      console.warn('[Nado funding] status:', res.status);
-      return {};
-    }
+    if (!res.ok) { console.warn('[Nado funding] status:', res.status); return {}; }
 
     const raw = await res.json();
-    // raw = { "2": { product_id, funding_rate_x18, update_time }, "4": {...}, ... }
-
     const SCALE = 1e18;
     const rates = {};
-
     Object.values(raw).forEach(p => {
       const key = idToKey[p.product_id];
-      if (!key) return;
-      rates[key] = parseFloat(p.funding_rate_x18) / SCALE;
+      if (key) rates[key] = parseFloat(p.funding_rate_x18) / SCALE;
     });
-
-    console.log('[Nado funding] rates extraits:', rates);
     return rates;
 
   } catch (e) {
