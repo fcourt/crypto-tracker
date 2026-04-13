@@ -94,7 +94,7 @@ export async function fetchNadoPrices() {
     fetch(`${GATEWAY}/v1/query`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ type: 'market_prices' }), // ← type correct
+      body: JSON.stringify({ request_type: 'query_market_prices' }),
     }),
   ]);
 
