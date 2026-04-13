@@ -1,7 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-//import { useLivePrices, MARKETS, PLATFORMS } from '../hooks/useLivePrices';
 import { useLivePrices, PLATFORMS } from '../hooks/useLivePrices';
-//import { useMarkets } from '../hooks/useMarkets';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
@@ -32,7 +30,6 @@ export default function DeltaNeutralPage() {
   const [tradeStatus,     setTradeStatus]     = useState(null);
 
   const { markets, getPrice, getStepSize, getAssetMeta, getExtPrecision, lastUpdate } = useLivePrices(3000);
- // const { markets } = useMarkets();
 
   useEffect(() => {
     if (markets.length > 0 && !markets.find(m => m.id === marketId)) {
@@ -40,7 +37,7 @@ export default function DeltaNeutralPage() {
     }
   }, [markets]);
 
-  // ── Adresses ───────────────────────────────────────────────────────────────
+  // ── Adresses HL + Extended ─────────────────────────────────────────────────
   const [hlAddress,      setHlAddress]      = useState(() => localStorage.getItem('hl_address')?.trim()       || '');
   const [hlVaultAddress, setHlVaultAddress] = useState(() => localStorage.getItem('hl_vault_address')?.trim() || '');
   const [extApiKey,      setExtApiKey]      = useState(() => localStorage.getItem('ext_api_key') || getExtendedApiKeys()[0]?.apiKey || '');
@@ -50,20 +47,27 @@ export default function DeltaNeutralPage() {
     if (vault !== hlVaultAddress) setHlVaultAddress(vault);
   }, []);
 
-  // ── Fonctions save ─────────────────────────────────────────────────────────
+  // ── Adresses Nado ──────────────────────────────────────────────────────────
+  const [nadoAddress,    setNadoAddress]    = useState(() => localStorage.getItem('nado_address')    || '');
+  const [nadoAgentPk,    setNadoAgentPk]    = useState(() => localStorage.getItem('nado_agent_pk')   || '');
+  const [nadoSubaccount, setNadoSubaccount] = useState(() => localStorage.getItem('nado_subaccount') || 'default');
+
+  // ── Fonctions save HL + Extended ───────────────────────────────────────────
   const saveHlAddress      = (v) => { const val = v.trim(); setHlAddress(val);      localStorage.setItem('hl_address',       val); };
   const saveHlVaultAddress = (v) => { const val = v.trim(); setHlVaultAddress(val); localStorage.setItem('hl_vault_address', val); };
   const saveExtKey         = (key) => { setExtApiKey(key); localStorage.setItem('ext_api_key', key); saveExtendedApiKey(key, 'Delta Neutral'); };
+
+  // ── Fonctions save Nado ────────────────────────────────────────────────────
+  const saveNadoAddress    = (v) => { setNadoAddress(v);    localStorage.setItem('nado_address',    v); };
+  const saveNadoAgentPk    = (v) => { setNadoAgentPk(v);    localStorage.setItem('nado_agent_pk',   v); };
+  const saveNadoSubaccount = (v) => { setNadoSubaccount(v); localStorage.setItem('nado_subaccount', v); };
 
   // ── Hooks trading ──────────────────────────────────────────────────────────
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder(markets);
 
   // ── Marges ─────────────────────────────────────────────────────────────────
-  //const hlMarginAddress = hlEffectiveAddress;
   const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
   const extMargin = useExtMargin(extApiKey);
-
-  const isVaultValid = !!hlVaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim());
 
   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
@@ -74,7 +78,6 @@ export default function DeltaNeutralPage() {
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey, markets);
 
-  //const market = MARKETS.find(m => m.id === marketId);
   const market = markets.find(m => m.id === marketId);
   const plat1  = PLATFORMS.find(p => p.id === platform1);
   const plat2  = PLATFORMS.find(p => p.id === platform2);
@@ -119,9 +122,7 @@ export default function DeltaNeutralPage() {
   };
 
   const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
-
-    if (!market) throw new Error('Marché non résolu');  // ← guard
-    
+    if (!market) throw new Error('Marché non résolu');
     const hlKey  = market?.hlKey;
     const meta   = getAssetMeta(hlKey);
 
@@ -147,25 +148,21 @@ export default function DeltaNeutralPage() {
 
     return {
       platformId,
-      //hlKey,
       marketId,
       extKey:     market?.extKey,
-      //assetIndex: meta?.index ?? 0,
       isBuy:      side === 'LONG',
       size:       finalSize,
       limitPrice: roundedPrice,
-      //szDecimals,
-      //pxDecimals,
       orderType,
       reduceOnly,
     };
   };
 
   const handlePlaceLeg = async (legNum) => {
-     if (market && market.platform === 'hyperliquid' && market.assetIndex === null) {
-  setTradeStatus({ type: 'error', msg: '❌ Indices en cours de résolution, réessaie dans 2s' });
-  return;
-}
+    if (market && market.platform === 'hyperliquid' && market.assetIndex === null) {
+      setTradeStatus({ type: 'error', msg: '❌ Indices en cours de résolution, réessaie dans 2s' });
+      return;
+    }
     const setter     = legNum === 1 ? setPlacingLeg1 : setPlacingLeg2;
     const platformId = legNum === 1 ? platform1 : platform2;
     const side       = legNum === 1 ? side1 : side2;
@@ -181,13 +178,11 @@ export default function DeltaNeutralPage() {
     } finally { setter(false); }
   };
 
-  const handlePlaceBothLegs = async () => { 
-    // ← ajoute ce guard
+  const handlePlaceBothLegs = async () => {
     if (market?.platform === 'hyperliquid' && market?.assetIndex === null) {
       setTradeStatus({ type: 'error', msg: '❌ Indices en cours de résolution, réessaie dans 2s' });
       return;
     }
-    
     setPlacingLeg1(true); setPlacingLeg2(true); setTradeStatus(null);
     try {
       await Promise.all([
@@ -221,6 +216,9 @@ export default function DeltaNeutralPage() {
         hlAddress={hlAddress}           onHlChange={saveHlAddress}
         hlVaultAddress={hlVaultAddress} onVaultChange={saveHlVaultAddress}
         extApiKey={extApiKey}           onExtChange={saveExtKey}
+        nadoAddress={nadoAddress}       onNadoAddressChange={saveNadoAddress}
+        nadoAgentPk={nadoAgentPk}       onNadoAgentPkChange={saveNadoAgentPk}
+        nadoSubaccount={nadoSubaccount} onNadoSubaccountChange={saveNadoSubaccount}
       />
 
       <FeeConfigPanel fees={fees} onChange={handleFeeChange} />
