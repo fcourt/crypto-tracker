@@ -75,6 +75,7 @@ async function fetchExtPositions(apiKey, markets = []) {
   } catch (e) { console.warn('fetchExtPositions error:', e.message); return []; }
 }
 
+/*
 export function useHLMargin(mainAddress, vaultAddress) {
   const [margin,           setMargin]           = useState(null);
   const [effectiveAddress, setEffectiveAddress] = useState(null);
@@ -104,6 +105,68 @@ export function useHLMargin(mainAddress, vaultAddress) {
         });
         const state = await res.json();
         if (!cancelled) setMargin(parseFloat(state?.withdrawable ?? 0));
+      } catch (e) {
+        console.error('[HL margin] error:', e.message);
+        if (!cancelled) setMargin(null);
+      }
+    };
+
+    run();
+    const t = setInterval(run, 15000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [mainAddress, vaultAddress]);
+
+  return { margin, effectiveAddress };
+}
+*/
+
+export function useHLMargin(mainAddress, vaultAddress) {
+  const [margin,           setMargin]           = useState(null);
+  const [effectiveAddress, setEffectiveAddress] = useState(null);
+
+  useEffect(() => {
+    const main  = mainAddress?.trim();
+    const vault = vaultAddress?.trim();
+    const validMain  = !!(main  && /^0x[0-9a-fA-F]{40}$/i.test(main));
+    const validVault = !!(vault && /^0x[0-9a-fA-F]{40}$/i.test(vault));
+
+    if (!validMain && !validVault) {
+      setMargin(null);
+      setEffectiveAddress(null);
+      return;
+    }
+
+    const addr    = validVault ? vault : main;
+    const isVault = validVault;
+    setEffectiveAddress(addr);
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        if (isVault) {
+          // Sous-compte HL : HL remonte le PnL perp en spot (unified account)
+          // → la marge disponible est dans spotClearinghouseState sur l'adresse du vault
+          const res   = await fetch(HL_API, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.toLowerCase() }),
+          });
+          const state = await res.json();
+          const usdc  = state?.balances?.find(b => b.coin === 'USDC');
+          const total = parseFloat(usdc?.total ?? 0);
+          const hold  = parseFloat(usdc?.hold  ?? 0);
+          if (!cancelled) setMargin(total - hold);
+        } else {
+          // Compte principal : withdrawable = marge libre (inchangé)
+          const res   = await fetch(HL_API, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ type: 'clearinghouseState', user: addr.toLowerCase() }),
+          });
+          const state = await res.json();
+          if (!cancelled) setMargin(parseFloat(state?.withdrawable ?? 0));
+        }
       } catch (e) {
         console.error('[HL margin] error:', e.message);
         if (!cancelled) setMargin(null);
