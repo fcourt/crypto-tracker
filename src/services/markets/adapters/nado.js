@@ -89,45 +89,47 @@ export async function fetchNadoPrices() {
   const cached = getCached('nado_prices');
   if (cached) return cached;
 
-  const [symbolsRes, pricesRes] = await Promise.all([
-    fetch(`${ARCHIVE}/v2/symbols`),
-    fetch(`${GATEWAY}/v1/query`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_type: 'query_market_prices' }),
-    }),
-  ]);
+  // Étape 1 : récupérer les symbols pour avoir product_ids + nadoKey
+  const symbolsRes = await fetch(`${ARCHIVE}/v2/symbols`);
+  if (!symbolsRes.ok) throw new Error(`Nado /v2/symbols → ${symbolsRes.status}`);
+  const symbolsRaw = await symbolsRes.json();
 
-  if (!symbolsRes.ok || !pricesRes.ok)
-    throw new Error(`Nado prices fetch failed`);
-
-  const [symbolsRaw, pricesRaw] = await Promise.all([
-    symbolsRes.json(),
-    pricesRes.json(),
-  ]);
-
-  // product_id → nadoKey depuis /v2/symbols
+  // Construire idToKey ET la liste des product_ids actifs
   const idToKey = {};
+  const productIds = [];
+
   Object.values(symbolsRaw).forEach(s => {
     const pid = s.product_id ?? s.productId ?? null;
-    if (pid != null)
+    if (pid != null && pid !== 0) {
       idToKey[pid] = s.symbol.replace(/-PERP$/, '').replace(/-SPOT$/, '');
+      productIds.push(pid);
+    }
   });
 
-  // Extraire les prix depuis market_prices (mid = (bid + ask) / 2)
+  // Étape 2 : requête market_prices avec la liste des IDs
+  const pricesRes = await fetch(`${GATEWAY}/v1/query`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      type:        'market_prices',
+      product_ids: productIds,       // ← obligatoire
+    }),
+  });
+
+  if (!pricesRes.ok) throw new Error(`Nado prices fetch failed → ${pricesRes.status}`);
+  const pricesRaw = await pricesRes.json();
+
+  // Étape 3 : extraire les prix (mid = (bid + ask) / 2)
   const prices = {};
   const SCALE  = 1e18;
 
   (pricesRaw?.data?.market_prices || []).forEach(p => {
     const key = idToKey[p.product_id];
     if (!key) return;
-
     const bid = parseFloat(p.bid_x18);
     const ask = parseFloat(p.ask_x18);
-
-    // Ignorer les entrées invalides (ask = max int128 = marché sans liquidité)
+    // Ignorer les marchés sans liquidité (ask = max int128)
     if (!bid || !ask || ask > 1e35) return;
-
     prices[key] = (bid + ask) / 2 / SCALE;
   });
 
