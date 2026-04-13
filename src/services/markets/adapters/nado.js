@@ -26,6 +26,7 @@ const GATEWAY = 'https://gateway.prod.nado.xyz';
 const ARCHIVE  = 'https://archive.prod.nado.xyz';
 
 // Retourne { nadoKey: price } en joignant /v2/symbols + /v1/query
+/*
 export async function fetchNadoPrices() {
   const cached = getCached('nado_prices');
   if (cached) return cached;
@@ -81,4 +82,57 @@ export async function fetchNadoPrices() {
 
   setCached('nado_prices', prices);
   return prices; // { 'BTC': 73156.05, 'ETH': 3200.10, 'XAG': 32.4, ... }
+}
+*/
+
+export async function fetchNadoPrices() {
+  const cached = getCached('nado_prices');
+  if (cached) return cached;
+
+  const [symbolsRes, pricesRes] = await Promise.all([
+    fetch(`${ARCHIVE}/v2/symbols`),
+    fetch(`${GATEWAY}/v1/query`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'market_prices' }), // ← type correct
+    }),
+  ]);
+
+  if (!symbolsRes.ok || !pricesRes.ok)
+    throw new Error(`Nado prices fetch failed`);
+
+  const [symbolsRaw, pricesRaw] = await Promise.all([
+    symbolsRes.json(),
+    pricesRes.json(),
+  ]);
+
+  // product_id → nadoKey depuis /v2/symbols
+  const idToKey = {};
+  Object.values(symbolsRaw).forEach(s => {
+    const pid = s.product_id ?? s.productId ?? null;
+    if (pid != null)
+      idToKey[pid] = s.symbol.replace(/-PERP$/, '').replace(/-SPOT$/, '');
+  });
+
+  // Extraire les prix depuis market_prices (mid = (bid + ask) / 2)
+  const prices = {};
+  const SCALE  = 1e18;
+
+  (pricesRaw?.data?.market_prices || []).forEach(p => {
+    const key = idToKey[p.product_id];
+    if (!key) return;
+
+    const bid = parseFloat(p.bid_x18);
+    const ask = parseFloat(p.ask_x18);
+
+    // Ignorer les entrées invalides (ask = max int128 = marché sans liquidité)
+    if (!bid || !ask || ask > 1e35) return;
+
+    prices[key] = (bid + ask) / 2 / SCALE;
+  });
+
+  console.log('[Nado] prix extraits:', prices);
+
+  if (Object.keys(prices).length > 0) setCached('nado_prices', prices);
+  return prices;
 }
