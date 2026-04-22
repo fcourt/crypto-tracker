@@ -225,6 +225,7 @@ async function fetchHLVaultMargin(vaultAddress) {
   return parseFloat(usdc?.total ?? 0) - parseFloat(usdc?.hold ?? 0);
 }
 
+/*
 async function fetchHyenaMargin(mainAddress, vaultAddress) {
   // USDe est sur le spotClearinghouseState du compte principal OU du vault
   // On essaie vault en premier, puis main en fallback
@@ -248,6 +249,34 @@ async function fetchHyenaMargin(mainAddress, vaultAddress) {
     }
   }
   return null;
+}
+*/
+
+async function fetchHyenaMargin(mainAddress, vaultAddress) {
+  const candidates = [mainAddress, vaultAddress].filter(
+    a => a?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(a.trim())
+  );
+  if (candidates.length === 0) return null;
+
+  let best = null;
+  for (const addr of candidates) {
+    try {
+      const res   = await fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.trim().toLowerCase() }),
+      });
+      const state = await res.json();
+      const usde  = state?.balances?.find(b => b.coin === 'USDe');
+      if (usde) {
+        const val = parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
+        if (best === null || val > best) best = val; // garde le plus grand solde USDe trouvé
+      }
+    } catch (e) {
+      console.warn('fetchHyenaMargin error on', addr, ':', e.message);
+    }
+  }
+  return best;
 }
 
 async function fetchExtMargin(apiKey) {
