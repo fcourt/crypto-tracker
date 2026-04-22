@@ -10,6 +10,7 @@ const PLAT_BADGE = {
   xyz:         'bg-purple-900/60 text-purple-300 border-purple-700',
   hyena:       'bg-orange-900/60 text-orange-300 border-orange-700',
   extended:    'bg-teal-900/60 text-teal-300 border-teal-700',
+  nado:        'bg-green-900/60 text-green-300 border-green-700',  // ← ajouté
 };
 
 function PositionCard({ pos, isSelected, onSelect, livePrice }) {
@@ -48,10 +49,17 @@ function PositionCard({ pos, isSelected, onSelect, livePrice }) {
   );
 }
 
-export default function OpenTradesPanel({ hlAddress, hlVaultAddress, extApiKey, fees, getPrice }) {
-  //const { positions, loading, load } = useOpenPositions(hlAddress, hlVaultAddress, extApiKey);
+export default function OpenTradesPanel({
+  hlAddress, hlVaultAddress, extApiKey,
+  nadoAddress, nadoSubaccount,   // ← ajouté
+  fees, getPrice, markets,       // ← markets ajouté
+}) {
   const { positions, loading, load } = useOpenPositions(
-  hlAddress, hlVaultAddress, extApiKey, nadoAddress, nadoSubaccount, markets,);
+    hlAddress, hlVaultAddress, extApiKey,
+    nadoAddress, nadoSubaccount,
+    markets ?? [],               // ← fallback sécurisé
+  );
+
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [includeFees,    setIncludeFees]    = useState(true);
   const [includeFunding, setIncludeFunding] = useState(false);
@@ -94,49 +102,49 @@ export default function OpenTradesPanel({ hlAddress, hlVaultAddress, extApiKey, 
     if (leg2) setClosePrices(p => ({ ...p, [posKey(leg2)]: be.bePx2?.toFixed(2) ?? '' }));
   }, [be?.bePx1, be?.bePx2]);
 
-  const doClose = async (pos, orderType) => {   // orderType = 'taker' | 'maker'
-  const key = posKey(pos);
-  setFeedback(f => ({ ...f, [key]: null }));
-  setCloseMode(m => ({ ...m, [key]: 'pending' }));
-  try {
-    const lp      = getPrice(pos.marketId, pos.platform);
-    const limitPx = orderType === 'maker' ? parseFloat(closePrices[key]) : null;
+  const doClose = async (pos, orderType) => {
+    const key = posKey(pos);
+    setFeedback(f => ({ ...f, [key]: null }));
+    setCloseMode(m => ({ ...m, [key]: 'pending' }));
+    try {
+      const lp      = getPrice(pos.marketId, pos.platform);
+      const limitPx = orderType === 'maker' ? parseFloat(closePrices[key]) : null;
 
-    if (orderType === 'maker' && (!limitPx || isNaN(limitPx))) throw new Error('Prix limit invalide');
+      if (orderType === 'maker' && (!limitPx || isNaN(limitPx))) throw new Error('Prix limit invalide');
 
-    const isBuy    = pos.side === 'SHORT';
-    const refPrice = lp ?? pos.entryPx;
-    if (!refPrice || isNaN(refPrice) || refPrice <= 0) {
-      throw new Error(`Prix introuvable pour ${pos.label} — réessaie`);
+      const isBuy    = pos.side === 'SHORT';
+      const refPrice = lp ?? pos.entryPx;
+      if (!refPrice || isNaN(refPrice) || refPrice <= 0) {
+        throw new Error(`Prix introuvable pour ${pos.label} — réessaie`);
+      }
+
+      const price = orderType === 'taker'
+        ? (isBuy ? refPrice * 1.005 : refPrice * 0.995)
+        : limitPx;
+
+      await placeOrder({
+        platformId: pos.platform,
+        marketId:   pos.marketId,
+        isBuy,
+        size:       pos.szi,
+        limitPrice: price,
+        orderType,
+        reduceOnly: true,
+      });
+
+      setFeedback(f => ({ ...f, [key]: { ok: true, msg: '✅ Ordre envoyé' } }));
+      setTimeout(() => load(), 2500);
+    } catch (e) {
+      setFeedback(f => ({ ...f, [key]: { ok: false, msg: `❌ ${e.message}` } }));
+    } finally {
+      setCloseMode(m => ({ ...m, [key]: 'idle' }));
     }
+  };
 
-    const price = orderType === 'taker'
-      ? (isBuy ? refPrice * 1.005 : refPrice * 0.995)
-      : limitPx;
-
-    await placeOrder({
-      platformId: pos.platform,
-      marketId:   pos.marketId,   // ← nécessaire pour getMarkets()
-      isBuy,
-      size:       pos.szi,
-      limitPrice: price,
-      orderType,
-      reduceOnly: true,
-    });
-
-    setFeedback(f => ({ ...f, [key]: { ok: true, msg: '✅ Ordre envoyé' } }));
-    setTimeout(() => load(), 2500);
-  } catch (e) {
-    setFeedback(f => ({ ...f, [key]: { ok: false, msg: `❌ ${e.message}` } }));
-  } finally {
-    setCloseMode(m => ({ ...m, [key]: 'idle' }));
-  }
-};
-
-const doCloseBoth = async (orderType) => {
-  if (!leg1 || !leg2) return;
-  await Promise.allSettled([doClose(leg1, orderType), doClose(leg2, orderType)]);
-};
+  const doCloseBoth = async (orderType) => {
+    if (!leg1 || !leg2) return;
+    await Promise.allSettled([doClose(leg1, orderType), doClose(leg2, orderType)]);
+  };
 
   return (
     <DropSection title="📂 Trades Ouverts" badge={positions.length > 0 ? positions.length : null}>
@@ -169,7 +177,6 @@ const doCloseBoth = async (orderType) => {
         {selectedPositions.length > 0 && (
           <div className="rounded-xl border border-gray-600 bg-gray-900/60 p-4 flex flex-col gap-4">
 
-            {/* En-tête panel analyse */}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-sm font-bold text-white">
                 {selectedPositions.length === 2 ? '📊 Analyse Delta Neutral' : '📊 Analyse de position'}
@@ -189,7 +196,6 @@ const doCloseBoth = async (orderType) => {
               </div>
             </div>
 
-            {/* PnL synthèse */}
             {be && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {[
@@ -206,7 +212,6 @@ const doCloseBoth = async (orderType) => {
               </div>
             )}
 
-            {/* Cartes fermeture individuelle */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {selectedPositions.map(pos => {
                 const key    = posKey(pos);
@@ -223,7 +228,7 @@ const doCloseBoth = async (orderType) => {
                   <div key={key} className={`rounded-xl border p-4 flex flex-col gap-3 ${isLong ? 'border-green-800 bg-green-900/10' : 'border-red-800 bg-red-900/10'}`}>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-xs px-2 py-0.5 rounded border font-medium ${PLAT_BADGE[pos.platform] ?? ''}`}>
-                        {PLATFORMS.find(p => p.id === pos.platform)?.label}
+                        {PLATFORMS.find(p => p.id === pos.platform)?.label ?? pos.platform}
                       </span>
                       <span className="text-sm font-bold text-white">{pos.label}</span>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded ${isLong ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>{pos.side}</span>
@@ -293,7 +298,6 @@ const doCloseBoth = async (orderType) => {
               })}
             </div>
 
-            {/* Fermeture simultanée */}
             {selectedPositions.length === 2 && (
               <div className="border-t border-gray-700 pt-4 flex flex-col gap-2">
                 <p className="text-xs text-gray-400 font-medium">⚡ Fermeture simultanée des 2 legs</p>
