@@ -49,7 +49,9 @@ function PositionCard({ pos, isSelected, onSelect, livePrice }) {
 }
 
 export default function OpenTradesPanel({ hlAddress, hlVaultAddress, extApiKey, fees, getPrice }) {
-  const { positions, loading, load } = useOpenPositions(hlAddress, hlVaultAddress, extApiKey);
+  //const { positions, loading, load } = useOpenPositions(hlAddress, hlVaultAddress, extApiKey);
+  const { positions, loading, load } = useOpenPositions(
+  hlAddress, hlVaultAddress, extApiKey, nadoAddress, nadoSubaccount, markets,);
   const [selectedIds,    setSelectedIds]    = useState(new Set());
   const [includeFees,    setIncludeFees]    = useState(true);
   const [includeFunding, setIncludeFunding] = useState(false);
