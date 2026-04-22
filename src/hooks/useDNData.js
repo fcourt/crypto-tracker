@@ -1,11 +1,14 @@
+// hooks/useDNData.js
 import { useState, useEffect, useCallback } from 'react';
-//import { MARKETS } from './useLivePrices';
 import { HL_API } from '../utils/dnHelpers';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetchers positions
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchHLPositions(address, markets = []) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
-    // ─── Call natif HL + call HIP-3 xyz en parallèle ─────────────────
     const [resNative, resXyz] = await Promise.all([
       fetch(HL_API, {
         method:  'POST',
@@ -47,7 +50,6 @@ async function fetchHLPositions(address, markets = []) {
         });
 
     return [...parsePositions(stateNative), ...parsePositions(stateXyz)];
-
   } catch (e) { console.warn('fetchHLPositions error:', e.message); return []; }
 }
 
@@ -56,7 +58,7 @@ async function fetchExtPositions(apiKey, markets = []) {
   try {
     const res  = await fetch(
       `/api/extended?endpoint=${encodeURIComponent('/user/positions')}`,
-      { headers: { 'X-Api-Key': apiKey } }
+      { headers: { 'X-Api-Key': apiKey } },
     );
     const data = await res.json();
     return (data?.data || []).map(p => {
@@ -75,58 +77,132 @@ async function fetchExtPositions(apiKey, markets = []) {
   } catch (e) { console.warn('fetchExtPositions error:', e.message); return []; }
 }
 
-/*
-export function useHLMargin(mainAddress, vaultAddress) {
-  const [margin,           setMargin]           = useState(null);
-  const [effectiveAddress, setEffectiveAddress] = useState(null);
-
-  useEffect(() => {
-    const main  = mainAddress?.trim();
-    const vault = vaultAddress?.trim();
-    const validMain  = !!(main  && /^0x[0-9a-fA-F]{40}$/i.test(main));
-    const validVault = !!(vault && /^0x[0-9a-fA-F]{40}$/i.test(vault));
-
-    if (!validMain && !validVault) {
-      setMargin(null);
-      setEffectiveAddress(null);
-      return;
-    }
-
-    const addr = validVault ? vault : main;
-    setEffectiveAddress(addr);
-
-    let cancelled = false;
-    const run = async () => {
-      try {
-        const res   = await fetch(HL_API, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ type: 'clearinghouseState', user: addr.toLowerCase() }),
-        });
-        const state = await res.json();
-        if (!cancelled) setMargin(parseFloat(state?.withdrawable ?? 0));
-      } catch (e) {
-        console.error('[HL margin] error:', e.message);
-        if (!cancelled) setMargin(null);
-      }
-    };
-
-    run();
-    const t = setInterval(run, 15000);
-    return () => { cancelled = true; clearInterval(t); };
-  }, [mainAddress, vaultAddress]);
-
-  return { margin, effectiveAddress };
+async function fetchNadoPositions(address, subaccount = 'default', markets = []) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
+  try {
+    const [{ createNadoClient }, { createPublicClient, http }, { ink }] = await Promise.all([
+      import('@nadohq/client'),
+      import('viem'),
+      import('viem/chains'),
+    ]);
+    const publicClient = createPublicClient({ chain: ink, transport: http() });
+    const client       = createNadoClient('inkMainnet', undefined, publicClient);
+    const info         = await client.subaccount.getSubaccountSummary({
+      subaccountOwner: address.trim(),
+      subaccountName:  subaccount || 'default',
+    });
+    return (info?.data?.positions || [])
+      .filter(p => parseFloat(p.size) !== 0)
+      .map(p => {
+        const market = markets.find(m => m.nadoKey === p.market);
+        const szi    = parseFloat(p.size);
+        return {
+          platform:      'nado',
+          coin:          p.market,
+          marketId:      market?.id ?? null,
+          label:         market?.label ?? p.market,
+          side:          szi > 0 ? 'LONG' : 'SHORT',
+          szi:           Math.abs(szi),
+          entryPx:       parseFloat(p.entryPrice || 0),
+          unrealizedPnl: parseFloat(p.unrealizedPnl || 0),
+        };
+      });
+  } catch (e) { console.warn('fetchNadoPositions error:', e.message); return []; }
 }
-*/
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetchers marges
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchHLMainMargin(address) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
+  const res   = await fetch(HL_API, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type: 'clearinghouseState', user: address.trim().toLowerCase() }),
+  });
+  const state = await res.json();
+  return parseFloat(state?.withdrawable ?? 0);
+}
+
+async function fetchHLVaultMargin(vaultAddress) {
+  // Sous-compte HL : la marge libre est dans spotClearinghouseState (USDC, hold déduit)
+  if (!vaultAddress || !/^0x[0-9a-fA-F]{40}$/i.test(vaultAddress.trim())) return null;
+  const res   = await fetch(HL_API, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type: 'spotClearinghouseState', user: vaultAddress.trim().toLowerCase() }),
+  });
+  const state = await res.json();
+  const usdc  = state?.balances?.find(b => b.coin === 'USDC');
+  return parseFloat(usdc?.total ?? 0) - parseFloat(usdc?.hold ?? 0);
+}
+
+async function fetchHyenaMargin(vaultAddress) {
+  // HyENA règle les perps en USDe → spotClearinghouseState sur le vault, coin USDe
+  if (!vaultAddress || !/^0x[0-9a-fA-F]{40}$/i.test(vaultAddress.trim())) return null;
+  const res   = await fetch(HL_API, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type: 'spotClearinghouseState', user: vaultAddress.trim().toLowerCase() }),
+  });
+  const state = await res.json();
+  const usde  = state?.balances?.find(b => b.coin === 'USDe');
+  if (usde) return parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
+  // Fallback : clearinghouseState crossMargin si pas de balance USDe
+  const res2   = await fetch(HL_API, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type: 'clearinghouseState', user: vaultAddress.trim().toLowerCase() }),
+  });
+  const state2 = await res2.json();
+  const av     = parseFloat(state2?.crossMarginSummary?.accountValue   ?? 0);
+  const used   = parseFloat(state2?.crossMarginSummary?.totalMarginUsed ?? 0);
+  return av - used;
+}
+
+async function fetchExtMargin(apiKey) {
+  if (!apiKey?.trim()) return null;
+  const res  = await fetch(
+    `/api/extended?endpoint=${encodeURIComponent('/user/balance')}`,
+    { headers: { 'X-Api-Key': apiKey } },
+  );
+  const data = await res.json();
+  return parseFloat(data?.data?.availableForTrade ?? 0);
+}
+
+async function fetchNadoMargin(address, subaccount = 'default') {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
+  const [{ createNadoClient }, { createPublicClient, http }, { ink }] = await Promise.all([
+    import('@nadohq/client'),
+    import('viem'),
+    import('viem/chains'),
+  ]);
+  const publicClient = createPublicClient({ chain: ink, transport: http() });
+  const client       = createNadoClient('inkMainnet', undefined, publicClient);
+  const info         = await client.subaccount.getSubaccountSummary({
+    subaccountOwner: address.trim(),
+    subaccountName:  subaccount || 'default',
+  });
+  // initialHealth = marge libre pour de nouvelles positions (équivalent free collateral)
+  return parseFloat(info?.data?.initialHealth ?? 0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hooks exportés — marges
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * useHLMargin — conservé pour compatibilité avec le code existant.
+ * Préférer useMargins pour les nouveaux usages.
+ */
 export function useHLMargin(mainAddress, vaultAddress) {
   const [margin,           setMargin]           = useState(null);
   const [effectiveAddress, setEffectiveAddress] = useState(null);
 
   useEffect(() => {
-    const main  = mainAddress?.trim();
-    const vault = vaultAddress?.trim();
+    const main       = mainAddress?.trim();
+    const vault      = vaultAddress?.trim();
     const validMain  = !!(main  && /^0x[0-9a-fA-F]{40}$/i.test(main));
     const validVault = !!(vault && /^0x[0-9a-fA-F]{40}$/i.test(vault));
 
@@ -141,32 +217,12 @@ export function useHLMargin(mainAddress, vaultAddress) {
     setEffectiveAddress(addr);
 
     let cancelled = false;
-
     const run = async () => {
       try {
-        if (isVault) {
-          // Sous-compte HL : HL remonte le PnL perp en spot (unified account)
-          // → la marge disponible est dans spotClearinghouseState sur l'adresse du vault
-          const res   = await fetch(HL_API, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.toLowerCase() }),
-          });
-          const state = await res.json();
-          const usdc  = state?.balances?.find(b => b.coin === 'USDC');
-          const total = parseFloat(usdc?.total ?? 0);
-          const hold  = parseFloat(usdc?.hold  ?? 0);
-          if (!cancelled) setMargin(total - hold);
-        } else {
-          // Compte principal : withdrawable = marge libre (inchangé)
-          const res   = await fetch(HL_API, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ type: 'clearinghouseState', user: addr.toLowerCase() }),
-          });
-          const state = await res.json();
-          if (!cancelled) setMargin(parseFloat(state?.withdrawable ?? 0));
-        }
+        const value = await (isVault
+          ? fetchHLVaultMargin(addr)
+          : fetchHLMainMargin(addr));
+        if (!cancelled) setMargin(value);
       } catch (e) {
         console.error('[HL margin] error:', e.message);
         if (!cancelled) setMargin(null);
@@ -174,7 +230,7 @@ export function useHLMargin(mainAddress, vaultAddress) {
     };
 
     run();
-    const t = setInterval(run, 15000);
+    const t = setInterval(run, 15_000);
     return () => { cancelled = true; clearInterval(t); };
   }, [mainAddress, vaultAddress]);
 
@@ -185,27 +241,90 @@ export function useExtMargin(apiKey) {
   const [margin, setMargin] = useState(null);
   useEffect(() => {
     if (!apiKey?.trim()) return;
+    let cancelled = false;
     const run = async () => {
       try {
-        const res  = await fetch(
-          `/api/extended?endpoint=${encodeURIComponent('/user/balance')}`,
-          { headers: { 'X-Api-Key': apiKey } }
-        );
-        const data = await res.json();
-        setMargin(parseFloat(data?.data?.availableForTrade || 0));
-      } catch { setMargin(null); }
+        const value = await fetchExtMargin(apiKey);
+        if (!cancelled) setMargin(value);
+      } catch { if (!cancelled) setMargin(null); }
     };
     run();
-    const t = setInterval(run, 15000);
-    return () => clearInterval(t);
+    const t = setInterval(run, 15_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [apiKey]);
   return margin;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useMargins — hook unifié, remplace getMarginForPlatform
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {{
+ *   hlAddress:      string,
+ *   hlVaultAddress: string,
+ *   extApiKey:      string,
+ *   nadoAddress:    string,
+ *   nadoSubaccount: string,
+ * }} cfg
+ * @param {number} interval  ms (défaut 15 000)
+ *
+ * @returns {{ margins: Record<string, number|null>, refresh: () => void }}
+ *
+ * Usage dans DeltaNeutralPage :
+ *   const { margins } = useMargins({ hlAddress, hlVaultAddress, extApiKey, nadoAddress, nadoSubaccount });
+ *   const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
+ */
+export function useMargins(cfg, interval = 15_000) {
+  const { hlAddress, hlVaultAddress, extApiKey, nadoAddress, nadoSubaccount } = cfg;
+
+  const [margins, setMargins] = useState({
+    hyperliquid: null,
+    xyz:         null,
+    hyena:       null,
+    extended:    null,
+    nado:        null,
+  });
+
+  const refresh = useCallback(async () => {
+    // Tous les fetchers en parallèle — un échec n'en bloque pas d'autres
+    const results = await Promise.allSettled([
+      fetchHLMainMargin(hlAddress),                         // hyperliquid
+      fetchHLMainMargin(hlAddress),                         // xyz (même compte HL)
+      fetchHyenaMargin(hlVaultAddress),                     // hyena — USDe du vault
+      fetchExtMargin(extApiKey),                            // extended
+      fetchNadoMargin(nadoAddress, nadoSubaccount),         // nado
+    ]);
+
+    const keys = ['hyperliquid', 'xyz', 'hyena', 'extended', 'nado'];
+    setMargins(
+      Object.fromEntries(
+        keys.map((key, i) => [
+          key,
+          results[i].status === 'fulfilled' ? results[i].value : null,
+        ]),
+      ),
+    );
+  }, [hlAddress, hlVaultAddress, extApiKey, nadoAddress, nadoSubaccount]);
+
+  useEffect(() => {
+    refresh();
+    const t = setInterval(refresh, interval);
+    return () => clearInterval(t);
+  }, [refresh, interval]);
+
+  return { margins, refresh };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// useOrderBook
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function useOrderBook(hlKey) {
   const [book, setBook] = useState({ bid: null, ask: null });
   useEffect(() => {
     if (!hlKey) return;
+    let cancelled = false;
     const run = async () => {
       try {
         const res  = await fetch(HL_API, {
@@ -216,54 +335,64 @@ export function useOrderBook(hlKey) {
         const data = await res.json();
         const bid  = parseFloat(data?.levels?.[0]?.[0]?.px);
         const ask  = parseFloat(data?.levels?.[1]?.[0]?.px);
-        setBook({ bid: isNaN(bid) ? null : bid, ask: isNaN(ask) ? null : ask });
-      } catch { setBook({ bid: null, ask: null }); }
+        if (!cancelled) setBook({ bid: isNaN(bid) ? null : bid, ask: isNaN(ask) ? null : ask });
+      } catch { if (!cancelled) setBook({ bid: null, ask: null }); }
     };
     run();
-    const t = setInterval(run, 5000);
-    return () => clearInterval(t);
+    const t = setInterval(run, 5_000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [hlKey]);
   return book;
 }
 
-export function useOpenPositions(mainAddress, vaultAddress, extApiKey, markets = []) {
+// ─────────────────────────────────────────────────────────────────────────────
+// useOpenPositions
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useOpenPositions(mainAddress, vaultAddress, extApiKey, nadoAddress, nadoSubaccount, markets = []) {
   const [positions, setPositions] = useState([]);
   const [loading,   setLoading]   = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
-    // ─── Vérification des adresses au moment du clic ─────────────────────
-  console.log('[OpenPositions] adresses au moment du load:', {
-    mainAddress,
-    vaultAddress,
-    vaultValid: !!(vaultAddress && /^0x[0-9a-fA-F]{40}$/i.test(vaultAddress)),
-    extApiKey: extApiKey ? extApiKey.slice(0, 8) + '…' : null,
-  });
-    try {
-      const [hlMain, hlVault, extPos] = await Promise.all([
-        fetchHLPositions(mainAddress, markets),
-        fetchHLPositions(vaultAddress, markets),
-        fetchExtPositions(extApiKey, markets),
-      ]);
-      console.log('[OpenPositions] results:', {
-      mainCount:  hlMain.length,
-      vaultCount: hlVault.length,
-      extCount:   extPos.length,
+    console.log('[OpenPositions] load:', {
+      mainAddress,
+      vaultAddress,
+      extApiKey: extApiKey ? extApiKey.slice(0, 8) + '…' : null,
+      nadoAddress,
+      nadoSubaccount,
     });
+    try {
+      const [hlMain, hlVault, extPos, nadoPos] = await Promise.all([
+        fetchHLPositions(mainAddress,  markets),
+        fetchHLPositions(vaultAddress, markets),
+        fetchExtPositions(extApiKey,   markets),
+        fetchNadoPositions(nadoAddress, nadoSubaccount, markets),
+      ]);
+
+      console.log('[OpenPositions] results:', {
+        mainCount:  hlMain.length,
+        vaultCount: hlVault.length,
+        extCount:   extPos.length,
+        nadoCount:  nadoPos.length,
+      });
+
+      // Déduplication HL main vs vault (même coin sur les deux)
       const seen   = new Set();
       const hlUniq = [
         ...hlMain.map(p  => ({ ...p, wallet: 'main'  })),
         ...hlVault.map(p => ({ ...p, wallet: 'vault' })),
       ].filter(p => {
-        const key = p.wallet + '-' + p.platform + '-' + p.coin;
+        const key = `${p.wallet}-${p.platform}-${p.coin}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
-      setPositions([...hlUniq, ...extPos]);
+
+      setPositions([...hlUniq, ...extPos, ...nadoPos]);
     } catch (e) { console.warn('useOpenPositions error:', e.message); }
     finally { setLoading(false); }
-  }, [mainAddress, vaultAddress, extApiKey, markets]);
+  }, [mainAddress, vaultAddress, extApiKey, nadoAddress, nadoSubaccount, markets]);
 
   return { positions, loading, load };
 }
