@@ -190,27 +190,29 @@ async function fetchHLVaultMargin(vaultAddress) {
   return parseFloat(usdc?.total ?? 0) - parseFloat(usdc?.hold ?? 0);
 }
 
-async function fetchHyenaMargin(vaultAddress) {
-  // HyENA règle les perps en USDe → spotClearinghouseState sur le vault, coin USDe
-  if (!vaultAddress || !/^0x[0-9a-fA-F]{40}$/i.test(vaultAddress.trim())) return null;
-  const res   = await fetch(HL_API, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ type: 'spotClearinghouseState', user: vaultAddress.trim().toLowerCase() }),
-  });
-  const state = await res.json();
-  const usde  = state?.balances?.find(b => b.coin === 'USDe');
-  if (usde) return parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
-  // Fallback : clearinghouseState crossMargin si pas de balance USDe
-  const res2   = await fetch(HL_API, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ type: 'clearinghouseState', user: vaultAddress.trim().toLowerCase() }),
-  });
-  const state2 = await res2.json();
-  const av     = parseFloat(state2?.crossMarginSummary?.accountValue   ?? 0);
-  const used   = parseFloat(state2?.crossMarginSummary?.totalMarginUsed ?? 0);
-  return av - used;
+async function fetchHyenaMargin(mainAddress, vaultAddress) {
+  // USDe est sur le spotClearinghouseState du compte principal OU du vault
+  // On essaie vault en premier, puis main en fallback
+  const addresses = [vaultAddress, mainAddress].filter(
+    a => a && /^0x[0-9a-fA-F]{40}$/i.test(a.trim())
+  );
+  if (addresses.length === 0) return null;
+
+  for (const addr of addresses) {
+    try {
+      const res   = await fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.trim().toLowerCase() }),
+      });
+      const state = await res.json();
+      const usde  = state?.balances?.find(b => b.coin === 'USDe');
+      if (usde) return parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
+    } catch (e) {
+      console.warn('fetchHyenaMargin error on', addr, e.message);
+    }
+  }
+  return null;
 }
 
 async function fetchExtMargin(apiKey) {
@@ -355,14 +357,22 @@ export function useMargins(cfg, interval = 15_000) {
   });
 
   const refresh = useCallback(async () => {
-    // Tous les fetchers en parallèle — un échec n'en bloque pas d'autres
+    // HL margin : vault si défini, sinon compte principal
+    const hlMarginFetcher = (hlVaultAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim()))
+      ? fetchHLVaultMargin(hlVaultAddress)   // sous-compte → solde spot USDC
+      : fetchHLMainMargin(hlAddress);        // compte principal → withdrawable
+
     const results = await Promise.allSettled([
-      fetchHLMainMargin(hlAddress),                         // hyperliquid
-      fetchHLMainMargin(hlAddress),                         // xyz (même compte HL)
-      fetchHyenaMargin(hlVaultAddress),                     // hyena — USDe du vault
-      fetchExtMargin(extApiKey),                            // extended
-      fetchNadoMargin(nadoAddress, nadoSubaccount),         // nado
-    ]);
+  (hlVaultAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim()))
+    ? fetchHLVaultMargin(hlVaultAddress)
+    : fetchHLMainMargin(hlAddress),                              // hyperliquid
+  (hlVaultAddress?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(hlVaultAddress.trim()))
+    ? fetchHLVaultMargin(hlVaultAddress)
+    : fetchHLMainMargin(hlAddress),                              // xyz (idem)
+  fetchHyenaMargin(hlAddress, hlVaultAddress),
+  fetchExtMargin(extApiKey),
+  fetchNadoMargin(nadoAddress, nadoSubaccount || 'default'),
+]);
 
     const keys = ['hyperliquid', 'xyz', 'hyena', 'extended', 'nado'];
     setMargins(
