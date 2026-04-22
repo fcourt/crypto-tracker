@@ -66,15 +66,27 @@ export default function DeltaNeutralPage() {
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder(markets);
 
   // ── Marges ─────────────────────────────────────────────────────────────────
-  const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
-  const extMargin = useExtMargin(extApiKey);
+  //const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
+  //const extMargin = useExtMargin(extApiKey);
 
-  const getMarginForPlatform = (platformId) => {
+  /*
+   const getMarginForPlatform = (platformId) => {
     if (platformId === 'extended') return extMargin;
     if (platformId === 'hyena')    return null;
     return hlMargin;
   };
+  */
 
+  const { margins } = useMargins({
+  hlAddress,
+  hlVaultAddress,
+  extApiKey,
+  nadoAddress,
+  nadoSubaccount,
+});
+
+const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
+  
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey, markets);
 
