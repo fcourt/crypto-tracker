@@ -5,22 +5,18 @@ import { HL_API } from '../utils/dnHelpers';
 
 // ─── Helpers Nado subaccount ───────────────────────────────────────────────
 
-const NADO_API = 'https://api.nado.xyz';
+const NADO_GATEWAY = 'https://gateway.nado.xyz'; // endpoint gateway REST
 
 function buildSubaccount(address, subaccount = 'default') {
-  // bytes32 = 20 bytes adresse + 12 bytes nom paddé — version browser (pas de Buffer)
-  const addrHex = address.toLowerCase().replace('0x', '');
-
-  // Encoder le nom en UTF-8 puis padder/tronquer à 12 bytes, converti en hex
-  const encoder  = new TextEncoder();
+  // bytes32 = 20 bytes adresse + 12 bytes nom UTF-8 paddé à droite avec 0x00
+  const addrHex   = address.toLowerCase().replace('0x', '');
+  const encoder   = new TextEncoder();
   const nameBytes = encoder.encode(subaccount.slice(0, 12));
   const padded    = new Uint8Array(12); // initialisé à 0x00
   padded.set(nameBytes);
-
   const nameHex = Array.from(padded)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
-
   return '0x' + addrHex + nameHex;
 }
 
@@ -132,7 +128,7 @@ async function fetchNadoPositions(address, subaccount = 'default', markets = [])
       });
   } catch (e) { console.warn('fetchNadoPositions error:', e.message); return []; }
 }
-*/
+
 
 async function fetchNadoPositions(address, subaccount = 'default', markets = []) {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
@@ -154,6 +150,45 @@ async function fetchNadoPositions(address, subaccount = 'default', markets = [])
           szi:           Math.abs(szi),
           entryPx:       parseFloat(p.entryPrice || 0),
           unrealizedPnl: parseFloat(p.unrealizedPnl || 0),
+        };
+      });
+  } catch (e) {
+    console.warn('fetchNadoPositions error:', e.message);
+    return [];
+  }
+}
+*/
+
+async function fetchNadoPositions(address, subaccount = 'default', markets = []) {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
+  try {
+    const sub = buildSubaccount(address.trim(), subaccount || 'default');
+    const res = await fetch(`${NADO_GATEWAY}/query`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'subaccount_info', subaccount: sub }),
+    });
+    const data = await res.json();
+    if (data?.status !== 'success' || !data?.data?.exists) return [];
+
+    // perp_balances : amount scalé par 1e18, product_id → correspond au market Nado
+    return (data.data.perp_balances || [])
+      .filter(p => parseFloat(p.balance.amount) !== 0)
+      .map(p => {
+        const szi    = parseFloat(p.balance.amount) / 1e18;
+        const market = markets.find(m => m.nadoProductId === p.product_id);
+        // v_quote_balance négatif = entry cost → entryPx = abs(v_quote) / abs(size)
+        const vQuote = parseFloat(p.balance.v_quote_balance) / 1e18;
+        const entryPx = szi !== 0 ? Math.abs(vQuote / szi) : 0;
+        return {
+          platform:      'nado',
+          coin:          market?.nadoKey ?? `product_${p.product_id}`,
+          marketId:      market?.id ?? null,
+          label:         market?.label ?? `product_${p.product_id}`,
+          side:          szi > 0 ? 'LONG' : 'SHORT',
+          szi:           Math.abs(szi),
+          entryPx,
+          unrealizedPnl: 0, // calculé côté UI avec le prix live
         };
       });
   } catch (e) {
@@ -242,7 +277,7 @@ async function fetchNadoMargin(address, subaccount = 'default') {
   // initialHealth = marge libre pour de nouvelles positions (équivalent free collateral)
   return parseFloat(info?.data?.initialHealth ?? 0);
 }
-*/
+
 
 async function fetchNadoMargin(address, subaccount = 'default') {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
@@ -251,6 +286,27 @@ async function fetchNadoMargin(address, subaccount = 'default') {
     const res = await fetch(`${NADO_API}/v1/subaccount/${sub}/summary`);
     const data = await res.json();
     return parseFloat(data?.data?.initialHealth ?? 0);
+  } catch (e) {
+    console.warn('fetchNadoMargin error:', e.message);
+    return null;
+  }
+}
+*/
+
+async function fetchNadoMargin(address, subaccount = 'default') {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
+  try {
+    const sub = buildSubaccount(address.trim(), subaccount || 'default');
+    const res = await fetch(`${NADO_GATEWAY}/query`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'subaccount_info', subaccount: sub }),
+    });
+    const data = await res.json();
+    if (data?.status !== 'success' || !data?.data?.exists) return null;
+    // healths[0] = initial health (marge libre pour nouvelles positions), scalé par 1e18
+    const health = data.data.healths?.[0]?.health;
+    return health != null ? parseFloat(health) / 1e18 : null;
   } catch (e) {
     console.warn('fetchNadoMargin error:', e.message);
     return null;
