@@ -3,8 +3,7 @@ import { useLivePrices, PLATFORMS } from '../hooks/useLivePrices';
 import { useFundingRates } from '../hooks/useFundingRates';
 import { getExtendedApiKeys, saveExtendedApiKey } from '../hooks/useExtendedData';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
-import { useHLMargin, useExtMargin, useMargins, useOrderBook } from '../hooks/useDNData';
-//import {useMargins, useOrderBook } from '../hooks/useDNData';
+import { useMargins, useOrderBook } from '../hooks/useDNData';
 import { loadFees, saveFees, minLeverageFor, roundToHLPrice } from '../utils/dnHelpers';
 import WalletConfigPanel from '../components/delta-neutral/WalletConfigPanel';
 import FeeConfigPanel    from '../components/delta-neutral/FeeConfigPanel';
@@ -67,27 +66,16 @@ export default function DeltaNeutralPage() {
   const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder(markets);
 
   // ── Marges ─────────────────────────────────────────────────────────────────
-  //const { margin: hlMargin, effectiveAddress: hlMarginAddress } = useHLMargin(hlAddress, hlVaultAddress);
-  //const extMargin = useExtMargin(extApiKey);
-
-  /*
-   const getMarginForPlatform = (platformId) => {
-    if (platformId === 'extended') return extMargin;
-    if (platformId === 'hyena')    return null;
-    return hlMargin;
-  };
-  */
-
   const { margins } = useMargins({
-  hlAddress,
-  hlVaultAddress,
-  extApiKey,
-  nadoAddress,
-  nadoSubaccount,
-});
+    hlAddress,
+    hlVaultAddress,
+    extApiKey,
+    nadoAddress,
+    nadoSubaccount,
+  });
 
-const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
-  
+  const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
+
   // ── Funding & prix ─────────────────────────────────────────────────────────
   const { p1: fundingP1, p2: fundingP2, extBid, extAsk } = useFundingRates(marketId, platform1, platform2, extApiKey, markets);
 
@@ -122,11 +110,13 @@ const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
       asset1:    val / price1,
       asset2:    val / price2,
       spreadPct: ((price1 - price2) / price2) * 100,
-      limitP1,   limitP2,
+      limitP1,
+      limitP2,
       leverage1: minLeverageFor(val, getMarginForPlatform(platform1)),
       leverage2: minLeverageFor(val, getMarginForPlatform(platform2)),
     };
-  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, hlMargin, extMargin]);
+  }, [sizeUSD, price1, price2, side1, side2, book, extBid, extAsk, platform1, platform2, margins]);
+  //                                                                                         ↑ margins (pas hlMargin/extMargin)
 
   const handleFeeChange = (platformId, type, value) => {
     const updated = { ...fees, [platformId]: { ...fees[platformId], [type]: value } };
@@ -136,8 +126,8 @@ const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
 
   const buildOrderParams = (platformId, side, sizeAsset, limitPrice, orderType, reduceOnly = false) => {
     if (!market) throw new Error('Marché non résolu');
-    const hlKey  = market?.hlKey;
-    const meta   = getAssetMeta(hlKey);
+    const hlKey = market?.hlKey;
+    const meta  = getAssetMeta(hlKey);
 
     if (platformId !== 'extended' && !meta) {
       console.warn(`[buildOrderParams] Meta non trouvée pour "${hlKey}"`);
@@ -215,11 +205,6 @@ const getMarginForPlatform = (platformId) => margins[platformId] ?? null;
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold text-gray-300 uppercase tracking-wider">Position Delta Neutral</h2>
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {hlMarginAddress && (
-            <span className="font-mono text-green-400">
-              ✓ {hlMarginAddress.slice(0, 6)}…{hlMarginAddress.slice(-4)}
-            </span>
-          )}
           <PriceDot fresh={fresh} />
           {lastUpdate ? `MAJ ${lastUpdate.toLocaleTimeString('fr-FR')}` : 'Chargement...'}
         </div>
