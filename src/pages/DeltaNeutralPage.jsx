@@ -240,7 +240,12 @@ export default function DeltaNeutralPage() {
       <OpenTradesPanel
         hlAddress={hlAddress}
         hlVaultAddress={hlVaultAddress}
-        extApiKey={extApiKey} fees={fees} getPrice={getPrice}
+        extApiKey={extApiKey}
+        nadoAddress={nadoAddress}       
+        nadoSubaccount={nadoSubaccount}
+        markets={markets}
+        fees={fees}
+        getPrice={getPrice}
       />
     </div>
   );
