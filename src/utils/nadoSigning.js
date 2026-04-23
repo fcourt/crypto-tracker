@@ -31,7 +31,7 @@ function productIdToAddress(productId) {
 function buildNonce() {
   // recv_time : deadline à laquelle le serveur doit recevoir la requête
   // On donne 5 secondes de marge pour couvrir la latence réseau
-  return BigInt(Date.now() + 5000);
+  return BigInt(Date.now() + 10000);
 }
 
 // appendix standard : version=1, cross-margin, DEFAULT/IOC/FOK/POST_ONLY
