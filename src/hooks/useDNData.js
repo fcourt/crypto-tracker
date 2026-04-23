@@ -163,7 +163,7 @@ async function fetchNadoPositions(address, subaccount = 'default', markets = [])
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return [];
   try {
     const sub = buildSubaccount(address.trim(), subaccount || 'default');
-    const res = await fetch(`${NADO_GATEWAY}/query`, {
+    const res = await fetch('/api/nado', {   // ← même proxy
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ type: 'subaccount_info', subaccount: sub }),
@@ -275,7 +275,7 @@ async function fetchHyenaMargin(mainAddress, vaultAddress) {
       });
       const state = await res.json();
       console.log('[HyENA] balances:', JSON.stringify(state?.balances));
-      const usde = state?.balances?.find(b => b.coin === 'USDE');
+      const usde  = state?.balances?.find(b => b.coin.toUpperCase() === 'USDE');
       if (usde) {
         const val = parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
         console.log('[HyENA] USDe trouvé sur', addr, ':', val);
@@ -329,7 +329,7 @@ async function fetchNadoMargin(address, subaccount = 'default') {
   try {
     const sub = buildSubaccount(address.trim(), subaccount || 'default');
     console.log('[Nado] subaccount bytes32:', sub);
-    const res  = await fetch(`${NADO_GATEWAY}/query`, {
+    const res = await fetch('/api/nado', {   // ← proxy, pas gateway.nado.xyz direct
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ type: 'subaccount_info', subaccount: sub }),
