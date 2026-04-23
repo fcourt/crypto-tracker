@@ -275,7 +275,7 @@ async function fetchHyenaMargin(mainAddress, vaultAddress) {
       });
       const state = await res.json();
       console.log('[HyENA] balances:', JSON.stringify(state?.balances));
-      const usde = state?.balances?.find(b => b.coin === 'USDe');
+      const usde = state?.balances?.find(b => b.coin === 'USDE');
       if (usde) {
         const val = parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
         console.log('[HyENA] USDe trouvé sur', addr, ':', val);
