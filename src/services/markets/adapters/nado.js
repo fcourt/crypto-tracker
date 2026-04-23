@@ -59,6 +59,8 @@ export async function fetchNadoSymbols() {
 
     index[base] = {
       nadoProductId:  data.product_id ?? data.productId,
+      nadoPriceIncrementX18: data.price_increment_x18,  // ← string brut
+      nadoSizeIncrement:     data.size_increment,        // ← string brut
       nadoPxDecimals: priceInc > 0 ? Math.max(0, Math.ceil(-Math.log10(priceInc))) : 2,
       nadoSzDecimals: sizeInc  > 0 ? Math.max(0, Math.ceil(-Math.log10(sizeInc)))  : 6,
     };
