@@ -97,7 +97,7 @@ export async function placeNadoOrder({
   const sender     = buildSubaccount(address, subaccountName);
   const priceX18   = BigInt(Math.round(price * 1e18));
   const amountX18  = BigInt(Math.round(size  * 1e18));
-  const expiration = BigInt(expirationSec ?? Math.floor(Date.now() / 1000) + 60);
+  const expiration = BigInt(expirationSec ?? Math.floor(Date.now() / 1000) + 30 + 120);
   const nonce      = buildNonce();
   const appendix   = buildAppendix({ reduceOnly, orderType });
 
