@@ -10,12 +10,16 @@ const CHAIN_ID     = 57073; // Ink Mainnet
 
 // "default" → "64656661756c74" → padded à 12 bytes (24 hex chars)
 export function buildSubaccount(address, name = 'default') {
-  const addr    = address.toLowerCase().replace('0x', '');           // 40 hex chars
-  const nameHex = Buffer.from(name, 'utf8')
-    .toString('hex')
-    .padEnd(24, '0')  // 12 bytes = 24 hex chars
+  const addr    = address.toLowerCase().replace('0x', ''); // 40 hex chars
+
+  const bytes   = new TextEncoder().encode(name);          // UTF-8 bytes
+  const nameHex = Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .padEnd(24, '0')   // 12 bytes = 24 hex chars
     .slice(0, 24);
-  return '0x' + addr + nameHex;                                      // 64 hex chars total
+
+  return '0x' + addr + nameHex;                            // 64 hex chars total
 }
 
 // productId → adresse 20 bytes (verifyingContract pour place_order)
