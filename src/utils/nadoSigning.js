@@ -1,83 +1,51 @@
 // utils/nadoSigning.js
-//import { ethers } from 'ethers';
 import { privateKeyToAccount } from 'viem/accounts';
-import { createWalletClient, http } from 'viem';
 
-const NADO_GATEWAY = 'https://gateway.prod.nado.xyz/v1';
-const CHAIN_ID     = 57073; // Ink Mainnet
+const NADO_GATEWAY_PROXY = '/api/nado'; // POST proxy → gateway.prod.nado.xyz/v1/query
+const NADO_EXECUTE       = 'https://gateway.prod.nado.xyz/v1/execute'; // exécution directe
+const CHAIN_ID           = 57073; // Ink Mainnet
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-// "default" → "64656661756c74" → padded à 12 bytes (24 hex chars)
 export function buildSubaccount(address, name = 'default') {
-  const addr    = address.toLowerCase().replace('0x', ''); // 40 hex chars
-
-  const bytes   = new TextEncoder().encode(name);          // UTF-8 bytes
+  const addr    = address.toLowerCase().replace('0x', '');
+  const bytes   = new TextEncoder().encode(name);
   const nameHex = Array.from(bytes)
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
-    .padEnd(24, '0')   // 12 bytes = 24 hex chars
+    .padEnd(24, '0')
     .slice(0, 24);
-
-  return '0x' + addr + nameHex;                            // 64 hex chars total
+  return '0x' + addr + nameHex;
 }
 
-// productId → adresse 20 bytes (verifyingContract pour place_order)
 function productIdToAddress(productId) {
   return '0x' + productId.toString(16).padStart(40, '0');
 }
 
-// appendix standard : version=1, cross-margin, DEFAULT/IOC/FOK/POST_ONLY
 function buildAppendix({ reduceOnly = false, orderType = 'DEFAULT' } = {}) {
   const orderTypeMap = { DEFAULT: 0n, IOC: 1n, FOK: 2n, POST_ONLY: 3n };
   const version = 1n;
   const ot      = orderTypeMap[orderType] ?? 0n;
   const ro      = reduceOnly ? 1n : 0n;
-  // bits: [7..0]=version [8]=isolated [10..9]=orderType [11]=reduceOnly
   return version | (ot << 9n) | (ro << 11n);
 }
 
-// ─── Query helper (GET avec query string) ───────────────────────────────────
-
-async function nadoQuery(params) {
-  const qs  = new URLSearchParams(
-    Object.entries(params).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)])
-  ).toString();
-  const res = await fetch(`${NADO_GATEWAY}/query?${qs}`, {
-    method:  'GET',
-    headers: { 'Accept-Encoding': 'gzip' },
-  });
-  return res.json();
-}
-
-// ─── Récupère l'adresse endpoint (pour cancel, withdraw, etc.) ──────────────
-
-let _endpointAddress = null;
-async function getEndpointAddress() {
-  if (_endpointAddress) return _endpointAddress;
-  const data = await nadoQuery({ type: 'contracts' });
-  _endpointAddress = data?.data?.endpoint;
-  return _endpointAddress;
-}
-
-// ─── Sync horloge avec le serveur Nado ───────────────────────────────────────
+// ─── Sync horloge avec le serveur Nado ──────────────────────────────────────
 let _serverTimeOffsetMs = 0;
 
 async function syncServerTime() {
   try {
-    const t0  = Date.now();
-    const res = await fetch('/api/nado', {
+    const t0   = Date.now();
+    const res  = await fetch(NADO_GATEWAY_PROXY, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ type: 'server_time' }),
     });
     const t1   = Date.now();
     const data = await res.json();
-    // server_time retourne { data: { server_time: <ms> } }
     const serverMs = data?.data?.server_time;
     if (serverMs) {
-      const latencyMs      = (t1 - t0) / 2;
-      _serverTimeOffsetMs  = serverMs - t1 + latencyMs;
+      _serverTimeOffsetMs = serverMs - t1 + (t1 - t0) / 2;
       console.log(`[Nado] clock offset: ${_serverTimeOffsetMs}ms`);
     }
   } catch (e) {
@@ -89,47 +57,71 @@ function serverNow() {
   return Date.now() + _serverTimeOffsetMs;
 }
 
-// ─── Nonce : recv_time en ms shiftée + 10 bits random ────────────────────────
+// ─── Nonce : recv_time en ms shiftée + 10 bits random ───────────────────────
 function buildNonce() {
-  const recvTime = BigInt(serverNow() + 5000); // deadline = maintenant serveur + 5s
+  const recvTime = BigInt(Math.floor(serverNow()) + 5000);
   const rand     = BigInt(Math.floor(Math.random() * 1024));
   return (recvTime << 20n) | rand;
 }
 
-// ─── Signature EIP-712 ──────────────────────────────────────────────────────
-
-/*
-async function signTyped(agentPk, domain, types, value) {
-  const wallet = new ethers.Wallet(agentPk);
-  return wallet.signTypedData(domain, types, value);
+// ─── Arrondi au tick price ───────────────────────────────────────────────────
+export function roundToNadoPrice(price, priceIncrementX18) {
+  const tickX18   = BigInt(priceIncrementX18);
+  const priceX18  = BigInt(Math.round(price * 1e18));
+  const remainder = priceX18 % tickX18;
+  const half      = tickX18 / 2n;
+  return remainder >= half ? priceX18 - remainder + tickX18 : priceX18 - remainder;
 }
-*/
 
+// ─── Arrondi au tick size ────────────────────────────────────────────────────
+function roundToNadoSize(size, sizeIncrement) {
+  const tickSz  = BigInt(sizeIncrement);
+  const sizeX18 = BigInt(Math.round(size * 1e18));
+  const rem     = sizeX18 % tickSz;
+  const half    = tickSz / 2n;
+  return rem >= half ? sizeX18 - rem + tickSz : sizeX18 - rem;
+}
+
+// ─── Signature EIP-712 ──────────────────────────────────────────────────────
 async function signTyped(agentPk, domain, types, value) {
   const account = privateKeyToAccount(agentPk);
   return account.signTypedData({ domain, types, primaryType: Object.keys(types)[0], message: value });
 }
 
-// ─── Place Order ─────────────────────────────────────────────────────────────
+// ─── Récupère l'adresse endpoint ────────────────────────────────────────────
+let _endpointAddress = null;
+async function getEndpointAddress() {
+  if (_endpointAddress) return _endpointAddress;
+  const res  = await fetch(NADO_GATEWAY_PROXY, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ type: 'contracts' }),
+  });
+  const data = await res.json();
+  _endpointAddress = data?.data?.endpoint;
+  return _endpointAddress;
+}
 
+// ─── Place Order ─────────────────────────────────────────────────────────────
 export async function placeNadoOrder({
   agentPk,
   address,
-  subaccountName = 'default',
+  subaccountName    = 'default',
   productId,
   price,
-  size,           // positif = buy, négatif = sell
-  reduceOnly     = false,
-  orderType      = 'DEFAULT',  // 'DEFAULT' | 'IOC' | 'FOK' | 'POST_ONLY'
+  size,                                        // positif = buy, négatif = sell
+  priceIncrementX18 = '1000000000000000000',
+  sizeIncrement     = '1000000000000000',
+  reduceOnly        = false,
+  orderType         = 'DEFAULT',
   expirationSec,
 }) {
-
-  await syncServerTime(); // ← sync horloge avant chaque ordre
+  await syncServerTime();
 
   const sender     = buildSubaccount(address, subaccountName);
-  const priceX18   = BigInt(Math.round(price * 1e18));
-  const amountX18  = BigInt(Math.round(size  * 1e18));
-  const expiration = BigInt(expirationSec ?? Math.floor(Date.now() / 1000) + 30 + 120);
+  const priceX18   = roundToNadoPrice(price, priceIncrementX18);         // ✅ arrondi tick price
+  const amountX18  = roundToNadoSize(size, sizeIncrement);               // ✅ arrondi tick size — une seule déclaration
+  const expiration = BigInt(expirationSec ?? Math.floor(serverNow() / 1000) + 150);
   const nonce      = buildNonce();
   const appendix   = buildAppendix({ reduceOnly, orderType });
 
@@ -137,7 +129,7 @@ export async function placeNadoOrder({
     name:              'Nado',
     version:           '0.0.1',
     chainId:           CHAIN_ID,
-    verifyingContract: productIdToAddress(productId),  // ← spécifique à place_order
+    verifyingContract: productIdToAddress(productId),
   };
 
   const types = {
@@ -151,16 +143,12 @@ export async function placeNadoOrder({
     ],
   };
 
-  const value = { sender, priceX18, amount: amountX18, expiration, nonce, appendix };
-
+  const value     = { sender, priceX18, amount: amountX18, expiration, nonce, appendix };
   const signature = await signTyped(agentPk, domain, types, value);
 
-  const res = await fetch(`${NADO_GATEWAY}/execute`, {
+  const res = await fetch(NADO_EXECUTE, {
     method:  'POST',
-    headers: {
-      'Content-Type':    'application/json',
-      'Accept-Encoding': 'gzip',
-    },
+    headers: { 'Content-Type': 'application/json', 'Accept-Encoding': 'gzip' },
     body: JSON.stringify({
       place_order: {
         product_id: productId,
@@ -179,21 +167,22 @@ export async function placeNadoOrder({
 
   const data = await res.json();
   if (data.status !== 'success') throw new Error(`[Nado] ${data.error ?? 'place_order failed'}`);
-  return data; // data.data.digest = order id
+  return data;
 }
 
 // ─── Cancel Orders ───────────────────────────────────────────────────────────
-
 export async function cancelNadoOrders({
   agentPk,
   address,
   subaccountName = 'default',
-  productIds,   // number[]
-  digests,      // string[] (bytes32 hex, depuis data.data.digest de place_order)
+  productIds,
+  digests,
 }) {
+  await syncServerTime();
+
   const sender   = buildSubaccount(address, subaccountName);
   const nonce    = buildNonce();
-  const endpoint = await getEndpointAddress();  // verifyingContract = endpoint pour cancel
+  const endpoint = await getEndpointAddress();
 
   const domain = {
     name:              'Nado',
@@ -214,17 +203,11 @@ export async function cancelNadoOrders({
   const value     = { sender, productIds, digests, nonce };
   const signature = await signTyped(agentPk, domain, types, value);
 
-  const res = await fetch(`${NADO_GATEWAY}/execute`, {
+  const res = await fetch(NADO_EXECUTE, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Accept-Encoding': 'gzip' },
     body: JSON.stringify({
-      cancel_orders: {
-        sender,
-        productIds,
-        digests,
-        nonce:     String(nonce),
-        signature,
-      },
+      cancel_orders: { sender, productIds, digests, nonce: String(nonce), signature },
     }),
   });
 
