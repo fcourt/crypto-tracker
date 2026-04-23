@@ -27,11 +27,6 @@ function productIdToAddress(productId) {
   return '0x' + productId.toString(16).padStart(40, '0');
 }
 
-// nonce = (now_ms + 50) << 20 | random_10_bits
-function buildNonce() {
-  return BigInt(Math.floor(Date.now() / 1000) + 10);
-}
-
 // appendix standard : version=1, cross-margin, DEFAULT/IOC/FOK/POST_ONLY
 function buildAppendix({ reduceOnly = false, orderType = 'DEFAULT' } = {}) {
   const orderTypeMap = { DEFAULT: 0n, IOC: 1n, FOK: 2n, POST_ONLY: 3n };
