@@ -65,6 +65,42 @@ async function getEndpointAddress() {
   return _endpointAddress;
 }
 
+// ─── Sync horloge avec le serveur Nado ───────────────────────────────────────
+let _serverTimeOffsetMs = 0;
+
+async function syncServerTime() {
+  try {
+    const t0  = Date.now();
+    const res = await fetch('/api/nado', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'server_time' }),
+    });
+    const t1   = Date.now();
+    const data = await res.json();
+    // server_time retourne { data: { server_time: <ms> } }
+    const serverMs = data?.data?.server_time;
+    if (serverMs) {
+      const latencyMs      = (t1 - t0) / 2;
+      _serverTimeOffsetMs  = serverMs - t1 + latencyMs;
+      console.log(`[Nado] clock offset: ${_serverTimeOffsetMs}ms`);
+    }
+  } catch (e) {
+    console.warn('[Nado] syncServerTime failed:', e.message);
+  }
+}
+
+function serverNow() {
+  return Date.now() + _serverTimeOffsetMs;
+}
+
+// ─── Nonce : recv_time en ms shiftée + 10 bits random ────────────────────────
+function buildNonce() {
+  const recvTime = BigInt(serverNow() + 5000); // deadline = maintenant serveur + 5s
+  const rand     = BigInt(Math.floor(Math.random() * 1024));
+  return (recvTime << 20n) | rand;
+}
+
 // ─── Signature EIP-712 ──────────────────────────────────────────────────────
 
 /*
@@ -92,6 +128,9 @@ export async function placeNadoOrder({
   orderType      = 'DEFAULT',  // 'DEFAULT' | 'IOC' | 'FOK' | 'POST_ONLY'
   expirationSec,
 }) {
+
+  await syncServerTime(); // ← sync horloge avant chaque ordre
+
   const sender     = buildSubaccount(address, subaccountName);
   const priceX18   = BigInt(Math.round(price * 1e18));
   const amountX18  = BigInt(Math.round(size  * 1e18));
