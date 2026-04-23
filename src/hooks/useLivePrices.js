@@ -6,7 +6,7 @@ import {
 
 import { fetchHLMids }     from '../services/markets/adapters/hyperliquid';
 import { fetchExtMids }    from '../services/markets/adapters/extended';
-import { fetchNadoPrices } from '../services/markets/adapters/nado';
+import { fetchNadoPrices, fetchNadoSymbols } from '../services/markets/adapters/nado';
 
 const HL_API = 'https://api.hyperliquid.xyz/info';
 const XYZ_OFFSET = 110000;
@@ -138,6 +138,7 @@ export function useLivePrices(intervalMs = 3000) {
   const [extMids,       setExtMids]       = useState({});
   const [extPrecisions, setExtPrecisions] = useState({});
   const [nadoMids,      setNadoMids]      = useState({});
+  const [nadoSymbols, setNadoSymbols]     = useState({});
   const [lastUpdate,    setLastUpdate]    = useState(null);
   const timer = useRef(null);
 
@@ -146,22 +147,33 @@ export function useLivePrices(intervalMs = 3000) {
     console.log('[fetchAll] début'); // ← AJOUTER ICI
     try {
       console.log('[fetchAll] avant Promise.all'); // ← ET ICI
-      const [hlResult, extResult, nadoMidsRaw] = await Promise.all([
+      const [hlResult, extResult, nadoMidsRaw, nadoSymbolsRaw] = await Promise.all([
         fetchHLMids(),
         fetchExtMids(),
         fetchNadoPrices().catch((e) => {
         console.warn('[fetchAll] fetchNadoPrices échoué:', e.message); // ← ET ICI
           return {};
       }),
+        fetchNadoSymbols().catch(e => {
+        console.warn('[fetchAll] fetchNadoSymbols échoué:', e.message);
+        return {};
+      }),
       ]);
 
       console.log('[fetchAll] nadoMidsRaw:', nadoMidsRaw); // ← ET ICI
 
-      const allMarkets = [
-        EMPTY_MARKET,
-        ...hlResult.discoveredMarkets.values(),
-        ...NADO_ONLY_MARKETS.filter(m => !hlResult.discoveredMarkets.has(m.id)),
-      ];
+      const baseMarkets = [
+  ...hlResult.discoveredMarkets.values(),
+  ...NADO_ONLY_MARKETS.filter(m => !hlResult.discoveredMarkets.has(m.id)),
+];
+
+const allMarkets = [
+  EMPTY_MARKET,
+  ...baseMarkets.map(m => ({
+    ...m,
+    ...(nadoSymbolsRaw[m.id] ?? {}), // injecte nadoProductId, nadoPxDecimals, nadoSzDecimals
+  })),
+];
 
       setMarkets(allMarkets);
       setHlMids(hlResult.prices         || {});
@@ -170,6 +182,7 @@ export function useLivePrices(intervalMs = 3000) {
       setExtMids(extResult.priceMap         || {});
       setExtPrecisions(extResult.precisionMap || {});
       setNadoMids(nadoMidsRaw);
+      setNadoSymbols(nadoSymbolsRaw);
       setLastUpdate(new Date());
     } catch (e) {
       console.warn('fetchAll error:', e.message);
