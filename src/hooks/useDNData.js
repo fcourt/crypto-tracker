@@ -227,32 +227,6 @@ async function fetchHLVaultMargin(vaultAddress) {
 
 /*
 async function fetchHyenaMargin(mainAddress, vaultAddress) {
-  // USDe est sur le spotClearinghouseState du compte principal OU du vault
-  // On essaie vault en premier, puis main en fallback
-  const addresses = [vaultAddress, mainAddress].filter(
-    a => a && /^0x[0-9a-fA-F]{40}$/i.test(a.trim())
-  );
-  if (addresses.length === 0) return null;
-
-  for (const addr of addresses) {
-    try {
-      const res   = await fetch(HL_API, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.trim().toLowerCase() }),
-      });
-      const state = await res.json();
-      const usde  = state?.balances?.find(b => b.coin === 'USDe');
-      if (usde) return parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
-    } catch (e) {
-      console.warn('fetchHyenaMargin error on', addr, e.message);
-    }
-  }
-  return null;
-}
-*/
-
-async function fetchHyenaMargin(mainAddress, vaultAddress) {
   const candidates = [mainAddress, vaultAddress].filter(
     a => a?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(a.trim())
   );
@@ -278,6 +252,42 @@ async function fetchHyenaMargin(mainAddress, vaultAddress) {
   }
   return best;
 }
+*/
+
+async function fetchHyenaMargin(mainAddress, vaultAddress) {
+  // USDe est sur le spot HL du vault HyENA (sous-compte)
+  // Si pas de vault, on essaie le compte principal
+  const candidates = [vaultAddress, mainAddress].filter(
+    a => a?.trim() && /^0x[0-9a-fA-F]{40}$/i.test(a.trim())
+  );
+  if (candidates.length === 0) {
+    console.log('[HyENA] aucune adresse valide');
+    return null;
+  }
+
+  for (const addr of candidates) {
+    try {
+      console.log('[HyENA] spotClearinghouseState pour:', addr);
+      const res   = await fetch(HL_API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ type: 'spotClearinghouseState', user: addr.trim().toLowerCase() }),
+      });
+      const state = await res.json();
+      console.log('[HyENA] balances:', JSON.stringify(state?.balances));
+      const usde = state?.balances?.find(b => b.coin === 'USDe');
+      if (usde) {
+        const val = parseFloat(usde.total ?? 0) - parseFloat(usde.hold ?? 0);
+        console.log('[HyENA] USDe trouvé sur', addr, ':', val);
+        if (val > 0) return val;
+      }
+    } catch (e) {
+      console.warn('[HyENA] error on', addr, ':', e.message);
+    }
+  }
+  console.log('[HyENA] aucun USDe trouvé');
+  return null;
+}
 
 async function fetchExtMargin(apiKey) {
   if (!apiKey?.trim()) return null;
@@ -290,38 +300,6 @@ async function fetchExtMargin(apiKey) {
 }
 
 /*
-async function fetchNadoMargin(address, subaccount = 'default') {
-  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
-  const [{ createNadoClient }, { createPublicClient, http }, { ink }] = await Promise.all([
-    import('@nadohq/client'),
-    import('viem'),
-    import('viem/chains'),
-  ]);
-  const publicClient = createPublicClient({ chain: ink, transport: http() });
-  const client       = createNadoClient('inkMainnet', undefined, publicClient);
-  const info         = await client.subaccount.getSubaccountSummary({
-    subaccountOwner: address.trim(),
-    subaccountName:  subaccount || 'default',
-  });
-  // initialHealth = marge libre pour de nouvelles positions (équivalent free collateral)
-  return parseFloat(info?.data?.initialHealth ?? 0);
-}
-
-
-async function fetchNadoMargin(address, subaccount = 'default') {
-  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
-  try {
-    const sub = buildSubaccount(address, subaccount);
-    const res = await fetch(`${NADO_API}/v1/subaccount/${sub}/summary`);
-    const data = await res.json();
-    return parseFloat(data?.data?.initialHealth ?? 0);
-  } catch (e) {
-    console.warn('fetchNadoMargin error:', e.message);
-    return null;
-  }
-}
-*/
-
 async function fetchNadoMargin(address, subaccount = 'default') {
   if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) return null;
   try {
@@ -338,6 +316,38 @@ async function fetchNadoMargin(address, subaccount = 'default') {
     return health != null ? parseFloat(health) / 1e18 : null;
   } catch (e) {
     console.warn('fetchNadoMargin error:', e.message);
+    return null;
+  }
+}
+*/
+
+async function fetchNadoMargin(address, subaccount = 'default') {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address.trim())) {
+    console.log('[Nado] adresse invalide ou vide:', address);
+    return null;
+  }
+  try {
+    const sub = buildSubaccount(address.trim(), subaccount || 'default');
+    console.log('[Nado] subaccount bytes32:', sub);
+    const res  = await fetch(`${NADO_GATEWAY}/query`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ type: 'subaccount_info', subaccount: sub }),
+    });
+    console.log('[Nado] HTTP status:', res.status);
+    const data = await res.json();
+    console.log('[Nado] response:', JSON.stringify(data).slice(0, 300));
+    if (data?.status !== 'success' || !data?.data?.exists) {
+      console.log('[Nado] exists=false ou status!=success');
+      return null;
+    }
+    // healths[0] = initial health, scalé par 1e18
+    const health = data.data.healths?.[0]?.health;
+    const result = health != null ? parseFloat(health) / 1e18 : null;
+    console.log('[Nado] margin:', result);
+    return result;
+  } catch (e) {
+    console.warn('[Nado] fetchNadoMargin error:', e.message);
     return null;
   }
 }
