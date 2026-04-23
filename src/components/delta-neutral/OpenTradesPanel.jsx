@@ -67,7 +67,8 @@ export default function OpenTradesPanel({
   const [closePrices,    setClosePrices]    = useState({});
   const [closeOType,     setCloseOType]     = useState({});
   const [feedback,       setFeedback]       = useState({});
-  const { placeOrder } = usePlaceOrder();
+  //const { placeOrder } = usePlaceOrder();
+  const { placeOrder } = usePlaceOrder(markets ?? []);
 
   const posKey = p => `${p.platform}-${p.coin}`;
 
