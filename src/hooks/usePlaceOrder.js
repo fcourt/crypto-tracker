@@ -251,12 +251,14 @@ export function usePlaceOrder(markets = []) {
       return await placeNadoOrder({
         agentPk,
         address,
-        subaccountName: subaccount,
-        productId:      nadoProductId,
-        price:          limitPrice,
-        size:           signedSize,
-        reduceOnly:     params.reduceOnly  ?? false,
-        orderType:      params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
+        subaccountName:      subaccount,
+        productId:           nadoProductId,
+        price:               limitPrice,
+        priceIncrementX18:   market.nadoPriceIncrementX18 ?? '1000000000000000000',
+        sizeIncrement:       market.nadoSizeIncrement      ?? '1000000000000000',
+        size:                signedSize,
+        reduceOnly:          params.reduceOnly  ?? false,
+        orderType:           params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
       });
     }
 
