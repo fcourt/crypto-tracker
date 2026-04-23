@@ -5,9 +5,8 @@ import { signL1Action } from '@nktkas/hyperliquid/signing';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ec, hash, shortString } from 'starknet';
 import { loadExtendedL2Configs } from './useExtendedL2Config';
-//import { getMarkets } from './useMarkets';
 import { roundToHLPrice } from '../utils/dnHelpers';
-
+import { placeNadoOrder } from '../utils/nadoSigning';
 
 // ─── Stark prime (felt252) ────────────────────────────────────────────────
 const STARK_PRIME = BigInt('0x800000000000011000000000000000000000000000000000000000000000001');
@@ -227,30 +226,45 @@ async function placeExtendedOrder({ starkPrivateKey, l2Vault, extApiKey, order }
 export function usePlaceOrder(markets = []) {
 
   const placeOrder = async (params) => {
-    const starkPrivateKey = localStorage.getItem('ext_stark_pk') || '';
-    const l2Vault         = localStorage.getItem('ext_l2_vault') || '';
-    const extApiKey       = readExtApiKey();
-    const agentPrivateKey = localStorage.getItem('hl_agent_pk') || '';
-    const vaultAddress    = localStorage.getItem('hl_vault_address')?.trim() || null;
-
-    //const { platformId, extKey, assetIndex, isBuy, size, limitPrice, pxDecimals, szDecimals } = params;
-
-    // ← params ne fournit plus assetIndex, szDecimals, pxDecimals
     const { platformId, isBuy, size, limitPrice } = params;
 
-    // ─── Résolution du marché (assetIndex réel via meta HL) ──────────────
-    // const allMarkets = await getMarkets();
-    //const market     = allMarkets.find(m => m.id === params.marketId);
     const market = markets.find(m => m.id === params.marketId);
     if (!market) throw new Error(`Marché inconnu : ${params.marketId}`);
 
     const { assetIndex, szDecimals, pxDecimals, extKey } = market;
-    if (platformId === 'hyperliquid' && assetIndex === null) {
-      throw new Error(`Index non résolu pour ${market.label} — réessaie dans 2s`);
+
+    // ─── Ordre Nado ───────────────────────────────────────────────────────
+    if (platformId === 'nado') {
+      const agentPk      = localStorage.getItem('nado_agent_pk')   || '';
+      const address      = localStorage.getItem('nado_address')     || '';
+      const subaccount   = localStorage.getItem('nado_subaccount')  || 'default';
+      if (!agentPk || !address) throw new Error('Clé agent ou adresse Nado manquante');
+
+      const nadoProductId = market?.nadoProductId;
+      if (!nadoProductId) throw new Error(`Marché ${market.label} non disponible sur Nado`);
+
+      // Nado : amount positif = buy, négatif = sell
+      const signedSize = isBuy ? Math.abs(size) : -Math.abs(size);
+
+      console.log(`[placeOrder Nado] ${market.label} | productId: ${nadoProductId} | price: ${limitPrice} | size: ${signedSize}`);
+
+      return await placeNadoOrder({
+        agentPk,
+        address,
+        subaccountName: subaccount,
+        productId:      nadoProductId,
+        price:          limitPrice,
+        size:           signedSize,
+        reduceOnly:     params.reduceOnly  ?? false,
+        orderType:      params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
+      });
     }
 
     // ─── Ordre Extended Exchange ───────────────────────────────────────────
     if (platformId === 'extended') {
+      const starkPrivateKey = localStorage.getItem('ext_stark_pk') || '';
+      const l2Vault         = localStorage.getItem('ext_l2_vault') || '';
+      const extApiKey       = readExtApiKey();
       if (!starkPrivateKey || !l2Vault) throw new Error('Clé Stark ou l2Vault manquant pour Extended');
       return await placeExtendedOrder({
         starkPrivateKey,
@@ -264,16 +278,20 @@ export function usePlaceOrder(markets = []) {
       });
     }
 
-    // ─── Ordre Hyperliquid (crypto + HIP-3) ───────────────────────────────
+    // ─── Ordre Hyperliquid ────────────────────────────────────────────────
+    if (platformId === 'hyperliquid' && assetIndex === null) {
+      throw new Error(`Index non résolu pour ${market.label} — réessaie dans 2s`);
+    }
+
+    const agentPrivateKey = localStorage.getItem('hl_agent_pk')          || '';
+    const vaultAddress    = localStorage.getItem('hl_vault_address')?.trim() || null;
     if (!agentPrivateKey) throw new Error('Clé privée agent HL manquante');
 
-    // Arrondi HL obligatoire (tick size valide)
     const roundedPrice = roundToHLPrice(limitPrice);
     const roundedSize  = parseFloat(size.toFixed(szDecimals ?? 6));
 
-    console.log(`[placeOrder HL] ${market.label} | index: ${assetIndex} | price: 
-    ${limitPrice} → ${roundedPrice} | size: ${size} → ${roundedSize}`);
-    
+    console.log(`[placeOrder HL] ${market.label} | index: ${assetIndex} | price: ${limitPrice} → ${roundedPrice} | size: ${size} → ${roundedSize}`);
+
     const wallet  = privateKeyToAccount(agentPrivateKey);
     const isMaker = !params.orderType || params.orderType === 'maker';
 
@@ -288,8 +306,8 @@ export function usePlaceOrder(markets = []) {
         orders: [{
           a: assetIndex,
           b: isBuy,
-          p: roundedPrice.toFixed(pxDecimals ?? 2),   // ← roundedPrice
-          s: roundedSize.toFixed(szDecimals ?? 6),    // ← roundedSize
+          p: roundedPrice.toFixed(pxDecimals ?? 2),
+          s: roundedSize.toFixed(szDecimals ?? 6),
           r: params.reduceOnly ?? false,
           t: { limit: { tif: isMaker ? 'Gtc' : 'Ioc' } },
         }],
@@ -306,7 +324,8 @@ export function usePlaceOrder(markets = []) {
 
   return {
     placeOrder,
-    get canTradeHL()  { return !!localStorage.getItem('hl_agent_pk'); },
-    get canTradeExt() { return !!localStorage.getItem('ext_stark_pk') && !!localStorage.getItem('ext_l2_vault'); },
+    get canTradeHL()   { return !!localStorage.getItem('hl_agent_pk'); },
+    get canTradeExt()  { return !!localStorage.getItem('ext_stark_pk') && !!localStorage.getItem('ext_l2_vault'); },
+    get canTradeNado() { return !!localStorage.getItem('nado_agent_pk') && !!localStorage.getItem('nado_address'); },
   };
 }
