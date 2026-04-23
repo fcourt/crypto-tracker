@@ -3,15 +3,34 @@ import { getCached, setCached } from '../cache.js';
 
 const DEAD = new Set(['not_tradable', 'reduce_only']);
 
+// ─── Endpoints ────────────────────────────────────────────────────────────────
+const GATEWAY_PROXY = '/api/nado';                        // POST → gateway.prod.nado.xyz/v1/query
+const ARCHIVE       = 'https://archive.prod.nado.xyz';    // GET  → direct (pas de CORS sur archive)
+
+// ─── Helper : POST via proxy gateway ─────────────────────────────────────────
+async function gatewayPost(body) {
+  const res = await fetch(GATEWAY_PROXY, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Nado gateway proxy → ${res.status}`);
+  return res.json();
+}
+
+// ─── Helper : GET archive ─────────────────────────────────────────────────────
+async function archiveGet(path) {
+  const res = await fetch(`${ARCHIVE}${path}`);
+  if (!res.ok) throw new Error(`Nado archive ${path} → ${res.status}`);
+  return res.json();
+}
+
+// ─── Available keys ───────────────────────────────────────────────────────────
 export async function fetchNadoAvailableKeys() {
   const cached = getCached('nado_keys');
   if (cached) return cached;
 
-  const res = await fetch('https://archive.prod.nado.xyz/v2/symbols');
-  if (!res.ok) throw new Error(`Nado /v2/symbols → ${res.status}`);
-  const raw = await res.json();
-
-  // Retourne les bases : 'BTC', 'ETH', 'XAG', 'WTI' …
+  const raw  = await archiveGet('/v2/symbols');
   const keys = new Set(
     Object.values(raw)
       .filter(m => !DEAD.has(m.trading_status))
@@ -22,20 +41,42 @@ export async function fetchNadoAvailableKeys() {
   return keys;
 }
 
-const GATEWAY = 'https://gateway.prod.nado.xyz';
-const ARCHIVE  = 'https://archive.prod.nado.xyz';
+// ─── Symboles Nado (product_id + décimales) ──────────────────────────────────
+export async function fetchNadoSymbols() {
+  const cached = getCached('nado_symbols');
+  if (cached) return cached;
 
+  const raw   = await archiveGet('/v2/symbols');
+  const index = {};
+
+  Object.values(raw).forEach(data => {
+    if (data.type !== 'perp')          return;
+    if (DEAD.has(data.trading_status)) return;
+
+    const base     = data.symbol.replace(/-PERP$/, '');
+    const priceInc = Number(data.price_increment_x18) / 1e18;
+    const sizeInc  = Number(data.size_increment)      / 1e18;
+
+    index[base] = {
+      nadoProductId:  data.product_id ?? data.productId,
+      nadoPxDecimals: priceInc > 0 ? Math.max(0, Math.ceil(-Math.log10(priceInc))) : 2,
+      nadoSzDecimals: sizeInc  > 0 ? Math.max(0, Math.ceil(-Math.log10(sizeInc)))  : 6,
+    };
+  });
+
+  if (Object.keys(index).length > 0) setCached('nado_symbols', index);
+  return index;
+}
+
+// ─── Prix Nado ────────────────────────────────────────────────────────────────
 export async function fetchNadoPrices() {
   const cached = getCached('nado_prices');
   if (cached) return cached;
 
-  // Étape 1 : récupérer les symbols pour avoir product_ids + nadoKey
-  const symbolsRes = await fetch(`${ARCHIVE}/v2/symbols`);
-  if (!symbolsRes.ok) throw new Error(`Nado /v2/symbols → ${symbolsRes.status}`);
-  const symbolsRaw = await symbolsRes.json();
+  // Étape 1 : récupérer les symbols via archive
+  const symbolsRaw = await archiveGet('/v2/symbols');
 
-  // Construire idToKey ET la liste des product_ids actifs
-  const idToKey = {};
+  const idToKey    = {};
   const productIds = [];
 
   Object.values(symbolsRaw).forEach(s => {
@@ -46,20 +87,13 @@ export async function fetchNadoPrices() {
     }
   });
 
-  // Étape 2 : requête market_prices avec la liste des IDs
-  const pricesRes = await fetch(`${GATEWAY}/v1/query`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      type:        'market_prices',
-      product_ids: productIds,       // ← obligatoire
-    }),
+  // Étape 2 : prix via proxy gateway
+  const pricesRaw = await gatewayPost({
+    type:        'market_prices',
+    product_ids: productIds,
   });
 
-  if (!pricesRes.ok) throw new Error(`Nado prices fetch failed → ${pricesRes.status}`);
-  const pricesRaw = await pricesRes.json();
-
-  // Étape 3 : extraire les prix (mid = (bid + ask) / 2)
+  // Étape 3 : mid = (bid + ask) / 2
   const prices = {};
   const SCALE  = 1e18;
 
@@ -68,7 +102,6 @@ export async function fetchNadoPrices() {
     if (!key) return;
     const bid = parseFloat(p.bid_x18);
     const ask = parseFloat(p.ask_x18);
-    // Ignorer les marchés sans liquidité (ask = max int128)
     if (!bid || !ask || ask > 1e35) return;
     prices[key] = (bid + ask) / 2 / SCALE;
   });
