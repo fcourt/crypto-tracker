@@ -29,9 +29,9 @@ function productIdToAddress(productId) {
 
 // nonce = (now_ms + 50) << 20 | random_10_bits
 function buildNonce() {
-  const ms   = BigInt(Date.now() + 50);
-  const rand = BigInt(Math.floor(Math.random() * 1024));
-  return (ms << 20n) + rand;
+  // recv_time : deadline à laquelle le serveur doit recevoir la requête
+  // On donne 5 secondes de marge pour couvrir la latence réseau
+  return BigInt(Date.now() + 5000);
 }
 
 // appendix standard : version=1, cross-margin, DEFAULT/IOC/FOK/POST_ONLY
