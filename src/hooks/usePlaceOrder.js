@@ -248,17 +248,27 @@ export function usePlaceOrder(markets = []) {
 
       console.log(`[placeOrder Nado] ${market.label} | productId: ${nadoProductId} | price: ${limitPrice} | size: ${signedSize}`);
 
+      const isMaker = params.orderType !== 'taker';
+
+      // POST_ONLY : décaler légèrement le prix pour ne pas croiser le book
+      // Buy POST_ONLY → prix légèrement sous le mid (on veut être bid, pas taker)
+      // Sell POST_ONLY → prix légèrement au-dessus du mid (on veut être ask, pas taker)
+      const nadoPrice = isMaker
+        ? (isBuy ? limitPrice * 0.9995 : limitPrice * 1.0005)
+        : limitPrice;
+      
       return await placeNadoOrder({
         agentPk,
         address,
         subaccountName:      subaccount,
         productId:           nadoProductId,
-        price:               limitPrice,
+        price:               nadoPrice,   // ← prix ajusté
         priceIncrementX18:   market.nadoPriceIncrementX18 ?? '1000000000000000000',
         sizeIncrement:       market.nadoSizeIncrement      ?? '1000000000000000',
         size:                signedSize,
         reduceOnly:          params.reduceOnly  ?? false,
-        orderType:           params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
+        orderType:           isMaker ? 'POST_ONLY' : 'IOC',
+        //orderType:           params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
       });
     }
 
