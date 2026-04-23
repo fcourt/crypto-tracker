@@ -63,8 +63,8 @@ export default function DeltaNeutralPage() {
   const saveNadoSubaccount = (v) => { setNadoSubaccount(v); localStorage.setItem('nado_subaccount', v); };
 
   // ── Hooks trading ──────────────────────────────────────────────────────────
-  const { placeOrder, canTradeHL, canTradeExt } = usePlaceOrder(markets);
-
+  const { placeOrder, canTradeHL, canTradeExt, canTradeNado } = usePlaceOrder(markets);
+  
   // ── Marges ─────────────────────────────────────────────────────────────────
   const { margins } = useMargins({
     hlAddress,
@@ -86,7 +86,12 @@ export default function DeltaNeutralPage() {
   const price2 = getPrice(marketId, platform2);
   const book   = useOrderBook(market?.hlKey);
 
-  const canTradePlatform = (platformId) => platformId === 'extended' ? canTradeExt : canTradeHL;
+  //const canTradePlatform = (platformId) => platformId === 'extended' ? canTradeExt : canTradeHL;
+  const canTradePlatform = (platformId) => {
+    if (platformId === 'extended') return canTradeExt;
+    if (platformId === 'nado')     return canTradeNado;
+    return canTradeHL;
+  };
 
   const suggestion = useMemo(() => {
     if (fundingP1 == null || fundingP2 == null) return null;
