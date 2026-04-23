@@ -267,8 +267,9 @@ export function usePlaceOrder(markets = []) {
         sizeIncrement:       market.nadoSizeIncrement      ?? '1000000000000000',
         size:                signedSize,
         reduceOnly:          params.reduceOnly  ?? false,
-        orderType:           isMaker ? 'POST_ONLY' : 'IOC',
+        //orderType:           isMaker ? 'POST_ONLY' : 'IOC',
         //orderType:           params.orderType === 'taker' ? 'IOC' : 'POST_ONLY',
+        orderType:           params.orderType === 'taker' ? 'IOC' : 'DEFAULT',
       });
     }
 
