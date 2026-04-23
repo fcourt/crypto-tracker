@@ -1,5 +1,7 @@
 // utils/nadoSigning.js
-import { ethers } from 'ethers';
+//import { ethers } from 'ethers';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createWalletClient, http } from 'viem';
 
 const NADO_GATEWAY = 'https://gateway.prod.nado.xyz/v1';
 const CHAIN_ID     = 57073; // Ink Mainnet
@@ -63,9 +65,16 @@ async function getEndpointAddress() {
 
 // ─── Signature EIP-712 ──────────────────────────────────────────────────────
 
+/*
 async function signTyped(agentPk, domain, types, value) {
   const wallet = new ethers.Wallet(agentPk);
   return wallet.signTypedData(domain, types, value);
+}
+*/
+
+async function signTyped(agentPk, domain, types, value) {
+  const account = privateKeyToAccount(agentPk);
+  return account.signTypedData({ domain, types, primaryType: Object.keys(types)[0], message: value });
 }
 
 // ─── Place Order ─────────────────────────────────────────────────────────────
