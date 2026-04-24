@@ -98,25 +98,7 @@ export default function WalletConfigPanel({
       setDexStatus('error');
     }
   };
-/*
-  const FieldGroup = ({ fields, accentColor }) =>
-    fields.map(({ label, val, setter, type, hint }) => (
-      <div key={label} className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500">{label}</label>
-        <div className="flex gap-2">
-          <input
-            type={type}
-            value={val || ''}
-            onChange={e => setter(e.target.value)}
-            placeholder={type === 'text' ? '0x...' : '••••••'}
-            className={`flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-${accentColor}-500`}
-          />
-          {val && <span className="flex items-center text-xs text-green-400 px-2">✓</span>}
-        </div>
-        <p className="text-gray-600 text-xs">{hint}</p>
-      </div>
-    ));
-  */
+  
   return (
     <div className="rounded-xl border border-gray-700 bg-gray-800 overflow-hidden">
       <button
